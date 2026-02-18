@@ -1,0 +1,7 @@
+python/trainer/.venv/bin/python3.12
+python/trainer/.venv/bin/python3
+python/trainer/.venv/bin/python
+python/trainer/.venv/pyvenv.cfg
+python/trainer/.venv/lib64
+venv/
+models/
