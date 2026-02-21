@@ -5,3 +5,4 @@ python/trainer/.venv/pyvenv.cfg
 python/trainer/.venv/lib64
 venv/
 models/
+cpp/build/
