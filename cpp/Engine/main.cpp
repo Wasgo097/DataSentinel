@@ -2,19 +2,40 @@
 #include <string>
 #include <vector>
 #include <sstream>
-#include <memory>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 
 #include <boost/asio.hpp>
 #include <onnxruntime_cxx_api.h>
 #include "json.hpp"
 
 using boost::asio::ip::tcp;
+using json = nlohmann::json;
 
-// ========================
-// Parse input string into vector of doubles
-// ========================
+namespace fs = std::filesystem;
+
+//////////////////////////////////////////////////////////////
+// =================== LOGGING ==============================
+//////////////////////////////////////////////////////////////
+
+constexpr bool DEBUG_LOG = true;
+
+void log_info(const std::string &msg)
+{
+    if (DEBUG_LOG)
+        std::cout << "[INFO] " << msg << std::endl;
+}
+
+void log_error(const std::string &msg)
+{
+    std::cerr << "[ERROR] " << msg << std::endl;
+}
+
+//////////////////////////////////////////////////////////////
+// =================== PARSING ==============================
+//////////////////////////////////////////////////////////////
+
 std::vector<double> parse_input(const std::string &input)
 {
     std::vector<double> values;
@@ -27,185 +48,118 @@ std::vector<double> parse_input(const std::string &input)
     return values;
 }
 
-// ========================
-// Load threshold from config file
-// ========================
-double load_threshold_from_json()
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
+//////////////////////////////////////////////////////////////
+// =================== CONFIG ===============================
+//////////////////////////////////////////////////////////////
 
-    fs::path config_path = fs::absolute("models/config.json");
+double load_threshold(const std::string &path)
+{
+    fs::path config_path = fs::absolute(path);
 
     if (!fs::exists(config_path))
-        throw std::runtime_error("Config file not found at " + config_path.string());
+        throw std::runtime_error("Config file not found: " + config_path.string());
 
     std::ifstream ifs(config_path);
     if (!ifs.is_open())
-        throw std::runtime_error("Failed to open config file at " + config_path.string());
+        throw std::runtime_error("Failed to open config file");
 
     json j;
     ifs >> j;
 
-    if (j.contains("threshold") && j["threshold"].is_number())
-        return j["threshold"].get<double>();
-    throw std::runtime_error("'threshold' key missing or not a number in config.json");
+    if (!j.contains("threshold") || !j["threshold"].is_number())
+        throw std::runtime_error("Invalid or missing 'threshold'");
+
+    return j["threshold"].get<double>();
 }
 
-// ========================
-// Load ONNX model from fixed path
-// ========================
-Ort::Session load_model(Ort::Env &env, Ort::SessionOptions &session_options)
+//////////////////////////////////////////////////////////////
+// =================== MODEL INIT ===========================
+//////////////////////////////////////////////////////////////
+
+Ort::Session create_session(Ort::Env &env,
+                            const std::string &model_path)
 {
-    namespace fs = std::filesystem;
-    fs::path model_path = fs::absolute("models/model.onnx");
+    fs::path path = fs::absolute(model_path);
 
-    if (!fs::exists(model_path))
-        throw std::runtime_error("Model file not found at " + model_path.string());
+    if (!fs::exists(path))
+        throw std::runtime_error("Model not found: " + path.string());
 
-    return Ort::Session(env, model_path.c_str(), session_options);
+    Ort::SessionOptions options;
+    options.SetIntraOpNumThreads(1);
+    options.SetGraphOptimizationLevel(
+        GraphOptimizationLevel::ORT_ENABLE_BASIC);
+
+    return Ort::Session(env, path.c_str(), options);
 }
 
-// ========================
-// Validate input size against model expectations
-// ========================
-bool validate_input(int64_t expected_size,
-                    const std::vector<double> &values,
-                    tcp::socket &socket)
+int64_t get_expected_input_size(Ort::Session &session)
 {
-    if (static_cast<int64_t>(values.size()) != expected_size)
-    {
-        std::cerr << "Input size mismatch. Expected: "
-                  << expected_size
-                  << ", Got: "
-                  << values.size()
-                  << "\n";
+    auto type_info = session.GetInputTypeInfo(0);
 
-        std::string error_response = "ERROR: Invalid input size\n";
-        boost::asio::write(socket, boost::asio::buffer(error_response));
-        return false;
-    }
+    if (type_info.GetONNXType() != ONNX_TYPE_TENSOR)
+        throw std::runtime_error("Model input is not a tensor");
 
-    return true;
+    auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
+    auto shape = tensor_info.GetShape();
+
+    if (shape.empty())
+        throw std::runtime_error("Input tensor has no shape");
+
+    return (shape.size() > 1) ? shape[1] : shape[0];
 }
 
-// ========================
-// Run ONNX model inference
-// ========================
+//////////////////////////////////////////////////////////////
+// =================== INFERENCE ============================
+//////////////////////////////////////////////////////////////
+
 double run_inference(Ort::Session &session,
                      const Ort::MemoryInfo &memory_info,
-                     std::vector<float> &input_tensor_values,
-                     const std::vector<double> &values,
-                     const char *const *input_names,
-                     const char *const *output_names)
+                     const std::vector<const char *> &input_names,
+                     const std::vector<const char *> &output_names,
+                     int64_t expected_size,
+                     const std::vector<double> &values)
 {
-    input_tensor_values.clear();
-    input_tensor_values.reserve(values.size());
+    std::vector<float> tensor_values;
+    tensor_values.reserve(values.size());
 
     for (double v : values)
-        input_tensor_values.push_back(static_cast<float>(v));
+        tensor_values.push_back(static_cast<float>(v));
 
-    std::vector<int64_t> input_shape = {
-        1,
-        static_cast<int64_t>(values.size())
-    };
+    std::vector<int64_t> shape = {1, expected_size};
 
     Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
         memory_info,
-        input_tensor_values.data(),
-        input_tensor_values.size(),
-        input_shape.data(),
-        input_shape.size()
-    );
+        tensor_values.data(),
+        tensor_values.size(),
+        shape.data(),
+        shape.size());
 
     auto output_tensors = session.Run(
         Ort::RunOptions{nullptr},
-        input_names,
+        input_names.data(),
         &input_tensor,
         1,
-        output_names,
-        1
-    );
+        output_names.data(),
+        1);
 
-    float *float_array = output_tensors[0].GetTensorMutableData<float>();
-    return static_cast<double>(float_array[0]);
+    float *output = output_tensors[0].GetTensorMutableData<float>();
+    return static_cast<double>(output[0]);
 }
 
-// ========================
-// Process a single client message
-// ========================
-bool process_message(Ort::Session &session,
-                     const Ort::MemoryInfo &memory_info,
-                     int64_t expected_size,
-                     std::vector<float> &input_tensor_values,
-                     const char *const *input_names,
-                     const char *const *output_names,
-                     double threshold,
-                     const std::string &data,
-                     tcp::socket &socket)
-{
-    try
-    {
-        std::cout << "Received: " << data << "\n";
+//////////////////////////////////////////////////////////////
+// =================== CLIENT HANDLING ======================
+//////////////////////////////////////////////////////////////
 
-        auto values = parse_input(data);
-
-        if (!validate_input(expected_size, values, socket))
-            return false;
-
-        double score = run_inference(
-            session,
-            memory_info,
-            input_tensor_values,
-            values,
-            input_names,
-            output_names
-        );
-
-        std::string response =
-            (score > threshold) ? "ANOMALY\n" : "OK\n";
-
-        boost::asio::write(socket, boost::asio::buffer(response));
-
-        std::cout << "Response sent: " << response;
-        return true;
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "ONNX inference failed: "
-                  << e.what()
-                  << "\n";
-
-        std::string error_response =
-            "ERROR: Inference failed\n";
-
-        try
-        {
-            boost::asio::write(socket,
-                               boost::asio::buffer(error_response));
-        }
-        catch (...)
-        {
-            // Client may have disconnected
-        }
-
-        return false;
-    }
-}
-
-// ========================
-// Handle client connection
-// ========================
-void handle_client(Ort::Session &session,
+void handle_client(tcp::socket &socket,
+                   Ort::Session &session,
                    const Ort::MemoryInfo &memory_info,
+                   const std::vector<const char *> &input_names,
+                   const std::vector<const char *> &output_names,
                    int64_t expected_size,
-                   std::vector<float> &input_tensor_values,
-                   const char *const *input_names,
-                   const char *const *output_names,
-                   double threshold,
-                   tcp::socket &socket)
+                   double threshold)
 {
-    std::cout << "Client connected.\n";
+    log_info("Client connected: " +
+             socket.remote_endpoint().address().to_string());
 
     boost::asio::streambuf buffer;
 
@@ -220,149 +174,126 @@ void handle_client(Ort::Session &session,
             std::string data;
             std::getline(input_stream, data);
 
-            process_message(session,
-                            memory_info,
-                            expected_size,
-                            input_tensor_values,
-                            input_names,
-                            output_names,
-                            threshold,
-                            data,
-                            socket);
-        }
-        catch (const boost::system::system_error &e)
-        {
-            if (e.code() == boost::asio::error::eof)
-                std::cout << "Client disconnected gracefully.\n";
-            else if (e.code() == boost::asio::error::connection_reset)
-                std::cout << "Client connection reset.\n";
-            else
-                std::cerr << "Connection error: "
-                          << e.what()
-                          << "\n";
+            log_info("Received raw: " + data);
 
-            break;
+            auto values = parse_input(data);
+
+            log_info("Parsed values count: " +
+                     std::to_string(values.size()));
+
+            if (static_cast<int64_t>(values.size()) != expected_size)
+            {
+                log_error("Invalid input size");
+
+                std::string response = "ERROR: Invalid input size\n";
+                boost::asio::write(socket,
+                                   boost::asio::buffer(response));
+
+                continue;
+            }
+
+            double score = run_inference(
+                session,
+                memory_info,
+                input_names,
+                output_names,
+                expected_size,
+                values);
+
+            log_info("Model score: " + std::to_string(score));
+
+            std::string response =
+                (score > threshold) ? "ANOMALY\n" : "OK\n";
+
+            log_info("Sending response: " + response);
+
+            boost::asio::write(socket,
+                               boost::asio::buffer(response));
         }
         catch (const std::exception &e)
         {
-            std::cerr << "Unexpected error: "
-                      << e.what()
-                      << "\n";
+            log_error(e.what());
             break;
         }
     }
 
     if (socket.is_open())
         socket.close();
+
+    log_info("Client disconnected");
 }
 
-// ========================
-// Main
-// ========================
+//////////////////////////////////////////////////////////////
+// =================== MAIN ================================
+//////////////////////////////////////////////////////////////
+
 int main()
 {
     try
     {
+        // ---- INIT MODEL ----
         Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "DataSentinel");
-        Ort::SessionOptions session_options;
-        session_options.SetIntraOpNumThreads(1);
-        session_options.SetGraphOptimizationLevel(
-            GraphOptimizationLevel::ORT_ENABLE_BASIC
-        );
-
         Ort::Session session =
-            load_model(env, session_options);
-
-        double THRESHOLD =
-            load_threshold_from_json();
-
-        std::cout << "Using threshold: "
-                  << THRESHOLD
-                  << "\n";
-
-        std::vector<std::string> input_name_vec =
-            session.GetInputNames();
-        std::vector<std::string> output_name_vec =
-            session.GetOutputNames();
-
-        if (input_name_vec.empty() ||
-            output_name_vec.empty())
-        {
-            throw std::runtime_error(
-                "Model has no input or output names"
-            );
-        }
-
-        std::vector<const char*> input_names_c;
-        std::vector<const char*> output_names_c;
-
-        for (auto &s : input_name_vec)
-            input_names_c.push_back(s.c_str());
-
-        for (auto &s : output_name_vec)
-            output_names_c.push_back(s.c_str());
-
-        auto type_info =
-            session.GetInputTypeInfo(0);
-
-        if (type_info.GetONNXType() != ONNX_TYPE_TENSOR)
-            throw std::runtime_error(
-                "Input is not a tensor!"
-            );
-
-        auto tensor_info =
-            type_info.GetTensorTypeAndShapeInfo();
-
-        auto shape = tensor_info.GetShape();
-
-        if (shape.empty())
-            throw std::runtime_error(
-                "Input tensor has no shape information"
-            );
+            create_session(env, "models/model.onnx");
 
         int64_t expected_size =
-            (shape.size() > 1) ?
-            shape[1] :
-            shape[0];
-
-        std::vector<float> input_tensor_values;
-        input_tensor_values.reserve(expected_size);
+            get_expected_input_size(session);
 
         Ort::MemoryInfo memory_info =
             Ort::MemoryInfo::CreateCpu(
                 OrtArenaAllocator,
-                OrtMemTypeDefault
-            );
+                OrtMemTypeDefault);
 
+        // ---- INPUT / OUTPUT NAMES ----
+        std::vector<std::string> input_names_str =
+            session.GetInputNames();
+
+        std::vector<std::string> output_names_str =
+            session.GetOutputNames();
+
+        std::vector<const char *> input_names;
+        std::vector<const char *> output_names;
+
+        for (auto &s : input_names_str)
+            input_names.push_back(s.c_str());
+
+        for (auto &s : output_names_str)
+            output_names.push_back(s.c_str());
+
+        // ---- CONFIG ----
+        double threshold =
+            load_threshold("models/config.json");
+
+        std::cout << "Threshold: "
+                  << threshold << "\n";
+
+        // ---- TCP SERVER ----
         boost::asio::io_context io_context;
         tcp::acceptor acceptor(
             io_context,
-            tcp::endpoint(tcp::v4(), 9000)
-        );
+            tcp::endpoint(tcp::v4(), 9000));
 
         std::cout
-            << "TCP Server listening on port 9000...\n";
+            << "Server listening on port 9000...\n";
 
         while (true)
         {
             tcp::socket socket(io_context);
             acceptor.accept(socket);
 
-            handle_client(session,
+            handle_client(socket,
+                          session,
                           memory_info,
+                          input_names,
+                          output_names,
                           expected_size,
-                          input_tensor_values,
-                          input_names_c.data(),
-                          output_names_c.data(),
-                          THRESHOLD,
-                          socket);
+                          threshold);
         }
     }
     catch (const std::exception &e)
     {
         std::cerr << "Fatal error: "
-                  << e.what()
-                  << "\n";
+                  << e.what() << "\n";
         return EXIT_FAILURE;
     }
 
