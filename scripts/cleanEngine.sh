@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Remove cpp/build directory contents
-cd cpp/build
+# Remove cpp/Engine/build directory contents
+cd cpp/Engine/build
 rm -rf *
-cd ../..
-echo "Cleared cpp/build directory"
+cd ../../..
+echo "Cleared cpp/Engine/build directory"

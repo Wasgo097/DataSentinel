@@ -122,6 +122,34 @@ int main()
 
             auto values = parse_input(data);
 
+            // Validate input size against model expectations
+            try
+            {
+                auto input_type_info = session.GetInputTypeInfo(0);
+                auto tensor_info = input_type_info.GetTensorTypeAndShapeInfo();
+                auto shape = tensor_info.GetShape();
+                
+                // Model shape is [1, num_features], check second dimension
+                int64_t expected_size = (shape.size() > 1) ? shape[1] : shape[0];
+                
+                if (static_cast<int64_t>(values.size()) != expected_size)
+                {
+                    std::cerr << "[ERROR] Input size mismatch. Expected: " << expected_size 
+                              << ", Got: " << values.size() << "\n";
+                    
+                    std::string error_response = "ERROR: Invalid input size\n";
+                    boost::asio::write(socket, boost::asio::buffer(error_response));
+                    continue;
+                }
+            }
+            catch (const std::exception &e)
+            {
+                std::cerr << "[ERROR] Failed to validate input: " << e.what() << "\n";
+                std::string error_response = "ERROR: Input validation failed\n";
+                boost::asio::write(socket, boost::asio::buffer(error_response));
+                continue;
+            }
+
             double score = 0.0;
             try
             {

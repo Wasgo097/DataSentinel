@@ -1,10 +1,10 @@
 #!/bin/bash
-set -e
+#set -e
 
 # znajdź katalog główny repo (czyli katalog nadrzędny scripts/)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-CPP_DIR="$PROJECT_ROOT/cpp"
+CPP_DIR="$PROJECT_ROOT/cpp/Engine"
 BUILD_DIR="$CPP_DIR/build"
 
 echo "Project root: $PROJECT_ROOT"

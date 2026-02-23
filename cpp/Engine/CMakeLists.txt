@@ -17,6 +17,6 @@ target_link_libraries(${PROJECT_NAME}
     onnxruntime::onnxruntime
 )
 
-# Ensure the header-only json.hpp in cpp/ is visible to the target and included in project sources
-target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/cpp")
+# Ensure the header-only json.hpp in current directory is visible to the target and included in project sources
+target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 target_sources(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/json.hpp")
