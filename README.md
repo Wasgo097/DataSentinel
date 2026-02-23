@@ -4,7 +4,7 @@ Below is the evolution of the project from prototype to production-ready version
 
 ---
 
-### **v1 – Basic Prototype**
+### **v1 – Basic Prototype** - done
 **Goal:** Test data flow and model training.
 
 - **Python Trainer**
