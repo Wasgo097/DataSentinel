@@ -15,5 +15,4 @@ if [ ! -x "$BIN" ]; then
   chmod +x "$BIN" || true
 fi
 
- exec "$BIN" "$@"
-#exec "$BIN"
+"$BIN" "$@"
