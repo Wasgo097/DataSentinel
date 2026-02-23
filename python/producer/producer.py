@@ -21,36 +21,55 @@ def generate_invalid_data():
 
 def main():
     message_count = 0
+    s = None
+    
     while True:
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            # Connect only if not connected
+            if s is None:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.connect((HOST, PORT))
+                print("[Producer] Connected to Engine.")
 
-                # Send invalid data every 10 messages
-                if message_count % 10 == 9:
-                    data = generate_invalid_data()
-                    print(f"[Producer] Sending INVALID data (4 elements): {data}")
-                    message_count = 0  # reset count after sending invalid data
-                else:
-                    data = generate_data()
-                    print(f"[Producer] Sending: {data}")
-                
-                # Format: space-separated float values with newline
-                message = " ".join(f"{value:.3f}" for value in data) + "\n"
-                s.sendall(message.encode())
+            # Send invalid data every 10 messages
+            if message_count % 10 == 9:
+                data = generate_invalid_data()
+                print(f"[Producer] Sending INVALID data ({len(data)} elements): {data}")
+                message_count = 0  # reset count after sending invalid data
+            else:
+                data = generate_data()
+                print(f"[Producer] Sending ({len(data)} elements): {data}")
+            
+            # Format: space-separated float values with newline
+            message = " ".join(f"{value:.3f}" for value in data) + "\n"
+            s.sendall(message.encode())
 
-                response = s.recv(4096)
-                print("[Producer] Received:", response.decode().strip())
-                
-                message_count += 1
+            response = s.recv(4096)
+            print("[Producer] Received:", response.decode().strip())
+            
+            message_count += 1
+            time.sleep(1)
 
         except ConnectionRefusedError:
-            print("[Producer] Engine not running...")
+            print("[Producer] Engine not running. Retrying in 3 seconds...")
+            if s is not None:
+                s.close()
+                s = None
+            time.sleep(3)
+        
+        except ConnectionResetError:
+            print("[Producer] Connection lost. Reconnecting...")
+            if s is not None:
+                s.close()
+                s = None
+            time.sleep(1)
         
         except Exception as e:
             print("[Producer] Error:", e)
-
-        time.sleep(1)
+            if s is not None:
+                s.close()
+                s = None
+            time.sleep(1)
 
 
 if __name__ == "__main__":

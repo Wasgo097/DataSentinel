@@ -10,7 +10,7 @@
 // ONNX Runtime C++ API
 #include <onnxruntime_cxx_api.h>
 
-// include header-only nlohmann::json (json.hpp placed in cpp/)
+// include header-only nlohmann::json
 #include "json.hpp"
 
 using boost::asio::ip::tcp;
@@ -78,6 +78,41 @@ Ort::Session load_model(Ort::Env &env, Ort::SessionOptions &session_options)
 }
 
 // ------------------------
+// Validate input size against model expectations
+// Returns true if valid, false otherwise (already sends error response to socket)
+// ------------------------
+bool validate_input(const Ort::Session &session, const std::vector<double> &values, tcp::socket &socket)
+{
+    try
+    {
+        auto input_type_info = session.GetInputTypeInfo(0);
+        auto tensor_info = input_type_info.GetTensorTypeAndShapeInfo();
+        auto shape = tensor_info.GetShape();
+
+        // Model shape is [1, num_features], check second dimension
+        int64_t expected_size = (shape.size() > 1) ? shape[1] : shape[0];
+
+        if (static_cast<int64_t>(values.size()) != expected_size)
+        {
+            std::cerr << "[ERROR] Input size mismatch. Expected: " << expected_size
+                      << ", Got: " << values.size() << "\n";
+
+            std::string error_response = "ERROR: Invalid input size\n";
+            boost::asio::write(socket, boost::asio::buffer(error_response));
+            return false;
+        }
+        return true;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "[ERROR] Failed to validate input: " << e.what() << "\n";
+        std::string error_response = "ERROR: Input validation failed\n";
+        boost::asio::write(socket, boost::asio::buffer(error_response));
+        return false;
+    }
+}
+
+// ------------------------
 // Main
 // ------------------------
 int main()
@@ -108,90 +143,101 @@ int main()
         {
             tcp::socket socket(io_context);
             acceptor.accept(socket);
-
             std::cout << "Client connected.\n";
 
-            boost::asio::streambuf buffer;
-            boost::asio::read_until(socket, buffer, "\n");
-
-            std::istream input_stream(&buffer);
-            std::string data;
-            std::getline(input_stream, data);
-
-            std::cout << "Received: " << data << "\n";
-
-            auto values = parse_input(data);
-
-            // Validate input size against model expectations
-            try
+            // Handle multiple messages from the same connection
+            while (socket.is_open())
             {
-                auto input_type_info = session.GetInputTypeInfo(0);
-                auto tensor_info = input_type_info.GetTensorTypeAndShapeInfo();
-                auto shape = tensor_info.GetShape();
-                
-                // Model shape is [1, num_features], check second dimension
-                int64_t expected_size = (shape.size() > 1) ? shape[1] : shape[0];
-                
-                if (static_cast<int64_t>(values.size()) != expected_size)
+                try
                 {
-                    std::cerr << "[ERROR] Input size mismatch. Expected: " << expected_size 
-                              << ", Got: " << values.size() << "\n";
-                    
-                    std::string error_response = "ERROR: Invalid input size\n";
-                    boost::asio::write(socket, boost::asio::buffer(error_response));
-                    continue;
+                    boost::asio::streambuf buffer;
+                    boost::asio::read_until(socket, buffer, "\n");
+
+                    std::istream input_stream(&buffer);
+                    std::string data;
+                    std::getline(input_stream, data);
+
+                    std::cout << "Received: " << data << "\n";
+
+                    auto values = parse_input(data);
+
+                    // Validate input
+                    if (!validate_input(session, values, socket))
+                    {
+                        continue;
+                    }
+
+                    double score = 0.0;
+                    try
+                    {
+                        // Prepare input tensor: assume model expects 1xN float tensor
+                        std::vector<float> input_tensor_values;
+                        input_tensor_values.reserve(values.size());
+                        for (double v : values)
+                            input_tensor_values.push_back(static_cast<float>(v));
+
+                        std::vector<int64_t> input_shape = {1, static_cast<int64_t>(values.size())};
+
+                        std::vector<std::string> input_name_vec = session.GetInputNames();
+                        std::vector<std::string> output_name_vec = session.GetOutputNames();
+
+                        if (input_name_vec.empty() || output_name_vec.empty())
+                            throw std::runtime_error("Model has no input or output names");
+
+                        Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+                        Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
+                            memory_info,
+                            input_tensor_values.data(),
+                            input_tensor_values.size(),
+                            input_shape.data(),
+                            input_shape.size());
+
+                        const char *input_names[] = {input_name_vec[0].c_str()};
+                        const char *output_names[] = {output_name_vec[0].c_str()};
+
+                        auto output_tensors = session.Run(Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 1);
+
+                        float *float_array = output_tensors[0].GetTensorMutableData<float>();
+                        score = static_cast<double>(float_array[0]);
+                    }
+                    catch (const std::exception &e)
+                    {
+                        std::cerr << "ONNX inference failed: " << e.what() << "\n";
+                    }
+
+                    std::string response = (score > THRESHOLD) ? "ANOMALY\n" : "OK\n";
+                    boost::asio::write(socket, boost::asio::buffer(response));
+
+                    std::cout << "Response sent: " << response;
+                }
+                catch (const boost::system::system_error &e)
+                {
+                    // Handle EOF, connection reset, and other system errors
+                    if (e.code() == boost::asio::error::eof)
+                    {
+                        std::cout << "Client disconnected gracefully.\n";
+                    }
+                    else if (e.code() == boost::asio::error::connection_reset)
+                    {
+                        std::cout << "Client connection reset.\n";
+                    }
+                    else
+                    {
+                        std::cerr << "[ERROR] Connection error: " << e.what() << "\n";
+                    }
+                    break;
+                }
+                catch (const std::exception &e)
+                {
+                    std::cerr << "[ERROR] Unexpected error: " << e.what() << "\n";
+                    break;
                 }
             }
-            catch (const std::exception &e)
+
+            if (socket.is_open())
             {
-                std::cerr << "[ERROR] Failed to validate input: " << e.what() << "\n";
-                std::string error_response = "ERROR: Input validation failed\n";
-                boost::asio::write(socket, boost::asio::buffer(error_response));
-                continue;
+                socket.close();
             }
-
-            double score = 0.0;
-            try
-            {
-                // Prepare input tensor: assume model expects 1xN float tensor
-                std::vector<float> input_tensor_values;
-                input_tensor_values.reserve(values.size());
-                for (double v : values)
-                    input_tensor_values.push_back(static_cast<float>(v));
-
-                std::vector<int64_t> input_shape = {1, static_cast<int64_t>(values.size())};
-
-                std::vector<std::string> input_name_vec = session.GetInputNames();
-                std::vector<std::string> output_name_vec = session.GetOutputNames();
-
-                if (input_name_vec.empty() || output_name_vec.empty())
-                    throw std::runtime_error("Model has no input or output names");
-
-                Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-                Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-                    memory_info,
-                    input_tensor_values.data(),
-                    input_tensor_values.size(),
-                    input_shape.data(),
-                    input_shape.size());
-
-                const char *input_names[] = {input_name_vec[0].c_str()};
-                const char *output_names[] = {output_name_vec[0].c_str()};
-
-                auto output_tensors = session.Run(Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 1);
-
-                float *float_array = output_tensors[0].GetTensorMutableData<float>();
-                score = static_cast<double>(float_array[0]);
-            }
-            catch (const std::exception &e)
-            {
-                std::cerr << "ONNX inference failed: " << e.what() << "\n";
-            }
-
-            std::string response = (score > THRESHOLD) ? "ANOMALY\n" : "OK\n";
-            boost::asio::write(socket, boost::asio::buffer(response));
-
-            std::cout << "Response sent: " << response;
         }
     }
     catch (const std::exception &e)
