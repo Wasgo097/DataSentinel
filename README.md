@@ -9,7 +9,8 @@ DataSentinel is an anomaly detection prototype built from three parts:
 
 - Local prototype flow is implemented and working
 - Trainer Dockerization is implemented and working
-- Dockerization of engine and producer is not done yet
+- Engine Dockerization is implemented
+- Dockerization of producer is not done yet
 
 ## Roadmap
 
@@ -21,7 +22,7 @@ DataSentinel is an anomaly detection prototype built from three parts:
 
 ### v2 - Dockerization (in progress)
 - Done: trainer Docker image and run script
-- Next: dockerize C++ engine
+- Done: engine Docker image and run script
 - Next: dockerize Python producer
 - Next: add `docker-compose` for end-to-end startup
 
@@ -101,6 +102,19 @@ This script:
 - builds image `datasentinel-trainer:dev`
 - runs trainer container
 - mounts host `models/` to `/app/models` in the container
+
+## Engine in Docker (implemented)
+
+Build and run engine via script:
+
+```bash
+./scripts/docker/runEngineDocker.sh
+```
+
+This script:
+- builds image `datasentinel-engine:dev`
+- runs engine container on port `9000`
+- mounts host `models/` to `/app/models` (read-only) in the container
 
 ## Output artifacts
 

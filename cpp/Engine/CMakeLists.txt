@@ -8,8 +8,27 @@ find_package(Boost REQUIRED COMPONENTS system)
 
 add_executable(${PROJECT_NAME} main.cpp)
 
-# Find ONNX Runtime (expects the package to provide a CMake config)
-set(onnxruntime_DIR "$ENV{HOME}/onnxruntime-linux-x64-1.24.2/lib64/cmake/onnxruntime")
+# Find ONNX Runtime (expects the package to provide a CMake config).
+# Priority:
+# 1) explicit -Donnxruntime_DIR=...
+# 2) ONNXRUNTIME_DIR environment variable
+# 3) auto-detect under $HOME/onnxruntime-linux-x64-*/(lib64|lib)/cmake/onnxruntime
+if(NOT DEFINED onnxruntime_DIR)
+    if(DEFINED ENV{ONNXRUNTIME_DIR})
+        set(onnxruntime_DIR "$ENV{ONNXRUNTIME_DIR}")
+    else()
+        file(GLOB _ORT_CANDIDATES
+            "$ENV{HOME}/onnxruntime-linux-x64-*/lib64/cmake/onnxruntime"
+            "$ENV{HOME}/onnxruntime-linux-x64-*/lib/cmake/onnxruntime"
+        )
+        list(LENGTH _ORT_CANDIDATES _ORT_CANDIDATES_COUNT)
+        if(_ORT_CANDIDATES_COUNT GREATER 0)
+            list(SORT _ORT_CANDIDATES)
+            list(REVERSE _ORT_CANDIDATES)
+            list(GET _ORT_CANDIDATES 0 onnxruntime_DIR)
+        endif()
+    endif()
+endif()
 find_package(onnxruntime REQUIRED CONFIG)
 
 target_link_libraries(${PROJECT_NAME}

@@ -265,7 +265,7 @@ int main()
             load_threshold("models/config.json");
 
         std::cout << "Threshold: "
-                  << threshold << "\n";
+                  << threshold << std::endl;
 
         // ---- TCP SERVER ----
         boost::asio::io_context io_context;
@@ -274,7 +274,7 @@ int main()
             tcp::endpoint(tcp::v4(), 9000));
 
         std::cout
-            << "Server listening on port 9000...\n";
+            << "Server listening on port 9000..." << std::endl;
 
         while (true)
         {
