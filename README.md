@@ -10,7 +10,7 @@ DataSentinel is an anomaly detection prototype built from three parts:
 - Local prototype flow is implemented and working
 - Trainer Dockerization is implemented and working
 - Engine Dockerization is implemented
-- Dockerization of producer is not done yet
+- Producer Dockerization is implemented
 
 ## Roadmap
 
@@ -23,7 +23,7 @@ DataSentinel is an anomaly detection prototype built from three parts:
 ### v2 - Dockerization (in progress)
 - Done: trainer Docker image and run script
 - Done: engine Docker image and run script
-- Next: dockerize Python producer
+- Done: producer Docker image and run script
 - Next: add `docker-compose` for end-to-end startup
 
 ### v3 - Performance backend (planned)
@@ -116,6 +116,24 @@ This script:
 - runs engine container on port `9000`
 - mounts host `models/` to `/app/models` (read-only) in the container
 
+## Producer in Docker (implemented)
+
+Build and run producer via script:
+
+```bash
+./scripts/docker/runProducerDocker.sh
+```
+
+By default producer uses:
+- `ENGINE_HOST=host.docker.internal`
+- `ENGINE_PORT=9000`
+
+You can override target host/port:
+
+```bash
+ENGINE_HOST=127.0.0.1 ENGINE_PORT=9000 ./scripts/docker/runProducerDocker.sh
+```
+
 ## Output artifacts
 
 Trainer produces:
@@ -127,4 +145,5 @@ These files are consumed by the C++ engine.
 ## Notes
 
 - Producer currently sends valid vectors most of the time and invalid vectors periodically (for input validation testing)
+- Producer host/port can be configured with `ENGINE_HOST` and `ENGINE_PORT`
 - ONNX export uses opset 18 in current trainer configuration

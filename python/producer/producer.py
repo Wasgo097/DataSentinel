@@ -1,9 +1,10 @@
 import socket
 import time
 import random
+import os
 
-HOST = "127.0.0.1"
-PORT = 9000
+HOST = os.getenv("ENGINE_HOST", "127.0.0.1")
+PORT = int(os.getenv("ENGINE_PORT", "9000"))
 
 # Model expects 8 float values
 EXPECTED_INPUT_SIZE = 8

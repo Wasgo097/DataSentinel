@@ -43,6 +43,7 @@ RUN ONNX_CMAKE_DIR="$(find /opt/onnxruntime -type d -path '*/cmake/onnxruntime' 
 # Runtime stage: lightweight image used only to run the compiled binary.
 FROM ubuntu:24.04 AS runtime
 
+# Disable interactive apt prompts in non-interactive container builds.
 ENV DEBIAN_FRONTEND=noninteractive
 # Runtime working directory.
 WORKDIR /app
