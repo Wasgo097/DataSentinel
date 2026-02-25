@@ -6,6 +6,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
+from dataset import load_labeled_csv
+
 
 # =========================
 # CONFIG
@@ -13,7 +15,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 INPUT_DIM = 8
 LATENT_DIM = 3
-NUM_SAMPLES = 5000
+NORMAL_LABEL = 0.0
 BATCH_SIZE = 64
 EPOCHS = 40
 LEARNING_RATE = 1e-3
@@ -21,21 +23,10 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MODEL_DIR = os.path.join(ROOT_DIR, "models")
 MODEL_PATH = os.path.join(MODEL_DIR, "model.onnx")
 CONFIG_PATH = os.path.join(MODEL_DIR, "config.json")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+TRAIN_CSV_PATH = os.path.join(DATA_DIR, "train.csv")
 
 os.makedirs(MODEL_DIR, exist_ok=True)
-
-
-# =========================
-# DATA GENERATION
-# =========================
-
-def generate_normal_data(num_samples: int, input_dim: int):
-    """
-    Generate synthetic normal data.
-    Mean = 0, std = 1
-    """
-    data = np.random.normal(0.0, 1.0, size=(num_samples, input_dim))
-    return data.astype(np.float32)
 
 
 # =========================
@@ -69,10 +60,8 @@ class Autoencoder(nn.Module):
 # TRAINING
 # =========================
 
-def train():
-    print("Generating data...")
-    data = generate_normal_data(NUM_SAMPLES, INPUT_DIM)
-
+def train(data: np.ndarray):
+    print("Training model...")
     dataset = TensorDataset(torch.from_numpy(data))
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
@@ -99,7 +88,7 @@ def train():
         print(f"Epoch [{epoch+1}/{EPOCHS}] Loss: {epoch_loss/len(dataloader):.6f}")
 
     print("Training complete.")
-    return model, data
+    return model
 
 
 # =========================
@@ -157,8 +146,9 @@ def export_onnx(model):
 def save_config(threshold):
     config = {
         "input_dim": INPUT_DIM,
+        "output_dim": INPUT_DIM,
         "latent_dim": LATENT_DIM,
-        "threshold": threshold
+        "threshold": threshold,
     }
 
     with open(CONFIG_PATH, "w") as f:
@@ -173,8 +163,14 @@ def save_config(threshold):
 
 def main():
     os.makedirs(MODEL_DIR, exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
 
-    model, data = train()
+    print(f"Loading labeled dataset from: {TRAIN_CSV_PATH}")
+    result = load_labeled_csv(TRAIN_CSV_PATH, input_dim=INPUT_DIM, normal_label=NORMAL_LABEL)
+    data = result.data
+    print(f"Loaded normal rows: {data.shape[0]} (dropped: {result.dropped_rows})")
+
+    model = train(data)
     threshold = calculate_threshold(model, data)
     export_onnx(model)
     save_config(threshold)

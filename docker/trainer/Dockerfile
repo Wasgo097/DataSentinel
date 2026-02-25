@@ -23,6 +23,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 # Copy trainer source code into the container.
 COPY python/trainer/train.py /app/python/trainer/train.py
+COPY python/trainer/dataset.py /app/python/trainer/dataset.py
+COPY python/trainer/data /app/python/trainer/data
 # Create output directory for model artifacts (model.onnx and config.json).
 RUN mkdir -p /app/models
 

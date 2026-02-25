@@ -4,6 +4,8 @@ name: datasentinel
 services:
   # One-off training job that writes ONNX artifacts to host models/.
   trainer:
+    # Run as host user to avoid creating root-owned files in bind-mounted models/.
+    user: "${DS_UID:-1000}:${DS_GID:-1000}"
     build:
       context: ..
       dockerfile: docker/trainer/Dockerfile

@@ -6,3 +6,5 @@ python/trainer/.venv/lib64
 venv/
 models/
 cpp/Engine/build/
+__pycache__/
+*.pyc

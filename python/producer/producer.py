@@ -9,10 +9,36 @@ PORT = int(os.getenv("ENGINE_PORT", "9000"))
 # Model expects 8 float values
 EXPECTED_INPUT_SIZE = 8
 
+# Data generation settings (tuned to match trainer scale roughly).
+# Normal samples default to [-1, 1]. Anomalies default to [-2, 2].
+NORMAL_MIN = float(os.getenv("NORMAL_MIN", "-1.0"))
+NORMAL_MAX = float(os.getenv("NORMAL_MAX", "1.0"))
+ANOMALY_MIN = float(os.getenv("ANOMALY_MIN", "-2.0"))
+ANOMALY_MAX = float(os.getenv("ANOMALY_MAX", "2.0"))
+
+# Probability that the next message is an anomaly (0.0 - 1.0).
+ANOMALY_RATE = float(os.getenv("ANOMALY_RATE", "0.1"))
+
 
 def generate_data():
-    """Generate 8 random float values as expected by the model (max 3 decimal places)"""
-    return [round(random.uniform(0.0, 100.0), 3) for _ in range(EXPECTED_INPUT_SIZE)]
+    """Generate a "normal" sample (max 3 decimal places)."""
+    return [round(random.uniform(NORMAL_MIN, NORMAL_MAX), 3) for _ in range(EXPECTED_INPUT_SIZE)]
+
+
+def generate_anomaly_data():
+    """
+    Generate an "anomaly" sample (max 3 decimal places).
+    Ensures at least one value is outside the normal range.
+    """
+    data = [random.uniform(ANOMALY_MIN, ANOMALY_MAX) for _ in range(EXPECTED_INPUT_SIZE)]
+
+    # Guarantee at least one out-of-normal-range feature so it's meaningfully different.
+    if all(NORMAL_MIN <= v <= NORMAL_MAX for v in data):
+        idx = random.randrange(EXPECTED_INPUT_SIZE)
+        # Push one feature to the edge of anomaly range (positive or negative).
+        data[idx] = ANOMALY_MAX if random.random() < 0.5 else ANOMALY_MIN
+
+    return [round(v, 3) for v in data]
 
 
 def generate_invalid_data():
@@ -38,8 +64,12 @@ def main():
                 print(f"[Producer] Sending INVALID data ({len(data)} elements): {data}")
                 message_count = 0  # reset count after sending invalid data
             else:
-                data = generate_data()
-                print(f"[Producer] Sending ({len(data)} elements): {data}")
+                if random.random() < ANOMALY_RATE:
+                    data = generate_anomaly_data()
+                    print(f"[Producer] Sending ANOMALY ({len(data)} elements): {data}")
+                else:
+                    data = generate_data()
+                    print(f"[Producer] Sending ({len(data)} elements): {data}")
             
             # Format: space-separated float values with newline
             message = " ".join(f"{value:.3f}" for value in data) + "\n"

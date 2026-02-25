@@ -12,7 +12,7 @@ mkdir -p "$PROJECT_ROOT/models"
 
 # Prepare model artifacts first.
 echo "Running trainer one-off job..."
-docker compose -f "$COMPOSE_FILE" run --rm --build trainer
+DS_UID="$(id -u)" DS_GID="$(id -g)" docker compose -f "$COMPOSE_FILE" run --rm --build trainer
 
 # Start runtime services.
 echo "Starting engine and producer..."

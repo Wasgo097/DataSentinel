@@ -112,12 +112,12 @@ int64_t get_expected_input_size(Ort::Session &session)
 // =================== INFERENCE ============================
 //////////////////////////////////////////////////////////////
 
-double run_inference(Ort::Session &session,
-                     const Ort::MemoryInfo &memory_info,
-                     const std::vector<const char *> &input_names,
-                     const std::vector<const char *> &output_names,
-                     int64_t expected_size,
-                     const std::vector<double> &values)
+double run_inference_mse(Ort::Session &session,
+                         const Ort::MemoryInfo &memory_info,
+                         const std::vector<const char *> &input_names,
+                         const std::vector<const char *> &output_names,
+                         int64_t expected_size,
+                         const std::vector<double> &values)
 {
     std::vector<float> tensor_values;
     tensor_values.reserve(values.size());
@@ -143,7 +143,17 @@ double run_inference(Ort::Session &session,
         1);
 
     float *output = output_tensors[0].GetTensorMutableData<float>();
-    return static_cast<double>(output[0]);
+
+    // Autoencoder output is a reconstruction vector (length = expected_size).
+    // Threshold from trainer is computed on mean squared reconstruction error.
+    double mse = 0.0;
+    for (int64_t i = 0; i < expected_size; i++)
+    {
+        double diff = static_cast<double>(output[i]) - static_cast<double>(tensor_values[static_cast<size_t>(i)]);
+        mse += diff * diff;
+    }
+    mse /= static_cast<double>(expected_size);
+    return mse;
 }
 
 //////////////////////////////////////////////////////////////
@@ -192,7 +202,7 @@ void handle_client(tcp::socket &socket,
                 continue;
             }
 
-            double score = run_inference(
+            double score = run_inference_mse(
                 session,
                 memory_info,
                 input_names,
@@ -200,7 +210,7 @@ void handle_client(tcp::socket &socket,
                 expected_size,
                 values);
 
-            log_info("Model score: " + std::to_string(score));
+            log_info("Reconstruction MSE: " + std::to_string(score));
 
             std::string response =
                 (score > threshold) ? "ANOMALY\n" : "OK\n";

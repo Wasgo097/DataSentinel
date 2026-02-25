@@ -19,11 +19,15 @@ DataSentinel is an anomaly detection prototype built from three parts:
 - Done: producer Docker image and run script
 - Done: `docker compose` stack for end-to-end startup
 
-### v3 - Performance backend (planned)
+### v3 - Data quality + GPU training (in progress)
+- Done: Train model on labeled dataset instead of synthetic random-only input
+- ToDo: Add GPU-accelerated training path for the trainer
+
+### v4 - Performance backend (planned)
 - ToDo: Add TensorRT-based inference path for C++ runtime
 - ToDo: Keep ONNX Runtime path as baseline and fallback
 
-### v4 - Service protocol (planned)
+### v5 - Service protocol (planned)
 - ToDo: Add shared `.proto` contracts for C++ and Python services
 - ToDo: Replace raw TCP communication with gRPC
 
@@ -60,6 +64,16 @@ models/
    - `config.json`
 2. Start C++ engine (reads `models/`, listens on `TCP :9000`)
 3. Start Python producer (connects to engine and sends sample vectors)
+
+## Dataset format (V3)
+
+Trainer expects labeled training data at `python/trainer/data/train.csv`.
+
+- Columns: first 8 columns are numeric features, last column is `label`
+- Convention: `label=0` means normal; training uses only normal rows
+
+CSV header:
+- `f1,f2,f3,f4,f5,f6,f7,f8,label`
 
 ## Run modes
 
@@ -128,6 +142,25 @@ Trainer produces:
 - `models/config.json`
 
 These files are consumed by the C++ engine.
+
+## Implementation TODOs (outside roadmap)
+
+Cross-cutting:
+- Add a small labeled `test.csv` and a simple evaluation script (TP/FP/FN) for threshold sanity checks
+- Add feature normalization (mean/std) computed in trainer and persisted in `models/config.json`, then apply it in engine/producer
+- Add a quick smoke test (1 epoch on tiny CSV) verifying that `model.onnx` and `config.json` are produced
+
+Trainer:
+- Add `val.csv` split and use it to compute threshold (e.g., percentile of reconstruction MSE) instead of `mean + 3*std`
+- Save basic training metadata to `models/` (seed, epochs, loss curve summary)
+
+Engine:
+- Validate model IO: ensure output length equals `input_dim` and fail fast with clear error
+- Improve protocol responses (include numeric MSE in debug mode)
+
+Producer:
+- Support a deterministic seed for reproducible runs (env var)
+- Optional mode to replay samples from a CSV instead of generating random data
 
 
 ## Troubleshooting

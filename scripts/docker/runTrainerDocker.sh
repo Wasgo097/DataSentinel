@@ -13,6 +13,6 @@ mkdir -p "$MODELS_DIR"
 
 # Run trainer as one-off compose job and rebuild image if needed.
 echo "Building and running trainer via docker compose..."
-docker compose -f "$COMPOSE_FILE" run --rm --build trainer
+DS_UID="$(id -u)" DS_GID="$(id -g)" docker compose -f "$COMPOSE_FILE" run --rm --build trainer
 
 echo "Trainer run completed."

@@ -32,6 +32,11 @@ done
 # 5️⃣ Run trainer
 echo "Running trainer..."
 python "$TRAINER"
+STATUS=$?
+if [ "$STATUS" -ne 0 ]; then
+    echo "Trainer failed with exit code $STATUS"
+    exit "$STATUS"
+fi
 
 # 6️⃣ Deactivate
 deactivate
