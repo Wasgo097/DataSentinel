@@ -1,67 +1,116 @@
-## DataSentinel – Project Roadmap
+# DataSentinel
 
-Below is the evolution of the project from prototype to production-ready versions.
+DataSentinel is an anomaly detection prototype built from three parts:
+- Python trainer that trains an autoencoder and exports ONNX artifacts
+- C++ engine that runs inference and serves a TCP endpoint
+- Python producer that sends sample data to the engine
 
----
+## Current status
 
-### **v1 – Basic Prototype** - done
-**Goal:** Test data flow and model training.
+- Local prototype flow is implemented and working
+- Trainer Dockerization is implemented and working
+- Dockerization of engine and producer is not done yet
 
-- **Python Trainer**
-  - Autoencoder (MLP) for anomaly detection
-  - Generates random data
-  - Exports model to ONNX (`models/model.onnx`) + `config.json`
-  - **Does not send data** — only trains the model
-- **Python Producer**
-  - Generates data (random for now)
-  - Sends data to C++ Receiver via TCP
-  - Receives results (number of detected anomalies)
-- **C++ Receiver**
-  - Receives data via TCP (Boost.Asio)
-  - Validates data using ONNX model
-  - Computes number of anomalies and sends results back
-- **Startup Script**
-  - `scripts/train.sh` creates venv, installs packages, runs trainer, deactivates venv
-- **Output**
-  - `models/model.onnx` → trained model
-  - `models/config.json` → training configuration
+## Roadmap
 
----
+### v1 - Local prototype (done)
+- Python trainer trains an autoencoder
+- Trainer exports `models/model.onnx` and `models/config.json`
+- C++ engine loads model/config and serves TCP on port `9000`
+- Python producer sends sample data to engine and prints responses
 
-### **v2 – Docker**
-**Goal:** Isolate services in containers.
+### v2 - Dockerization (in progress)
+- Done: trainer Docker image and run script
+- Next: dockerize C++ engine
+- Next: dockerize Python producer
+- Next: add `docker-compose` for end-to-end startup
 
-- Added folder: `docker/`
-- Each service (`trainer`, `runtime`, `client`) has its own Dockerfile
-- Docker maps:
-  - `models/` folder
-  - `config.json` file
-  - TCP ports between containers
-- File structure of the repo remains the same
+### v3 - Performance backend (planned)
+- Add TensorRT-based inference path for C++ runtime
+- Keep ONNX Runtime path as baseline and fallback
 
----
+### v4 - Service protocol (planned)
+- Replace raw TCP communication with gRPC
+- Add shared `.proto` contracts for C++ and Python services
 
-### **v3 – TensorRT**
-**Goal:** Speed up inference in C++.
+## Repository layout
 
-- Added folder: `cpp/inference/` → TensorRT backend
-- Added folder: `cpp/third_party/tensorrt/`
-- New file: `models/trt_engine.trt`
-- Rest of the repo stays unchanged
+```text
+python/
+  trainer/
+  producer/
+cpp/
+  Engine/
+scripts/
+models/
+```
 
----
+## Runtime flow
 
-### **v4 – gRPC**
-**Goal:** Replace TCP with gRPC for microservices.
+1. Train model in Python (`python/trainer/train.py`)
+2. Export artifacts to `models/`:
+   - `model.onnx`
+   - `config.json`
+3. Start C++ engine (reads `models/`, listens on `TCP :9000`)
+4. Start Python producer (connects to engine and sends sample vectors)
 
-- Added folder: `proto/`
-- C++ and Python use the same `.proto` file
-- TCP replaced with gRPC
-- Rest of the repo and classes remain the same
+## Prerequisites (local run)
 
----
+- Linux environment
+- Python 3
+- CMake
+- C++ compiler with C++20 support
+- Boost (system)
+- ONNX Runtime (for C++ engine)
 
-### 🔹 Additional Notes
-- Models and config always remain in `models/`
-- Main repo structure (`python/`, `cpp/`, `scripts/`, `README.md`) stays consistent across versions
-- Scripts in v1 run locally; v2+ support Docker and service isolation
+## Run locally (without Docker)
+
+Run trainer:
+
+```bash
+./scripts/runTrainer.sh
+```
+
+Build C++ engine:
+
+```bash
+./scripts/buildEngine.sh
+```
+
+Run engine:
+
+```bash
+./scripts/runEngine.sh
+```
+
+Run producer (in another terminal):
+
+```bash
+./scripts/runProducer.sh
+```
+
+## Trainer in Docker (implemented)
+
+Build and run trainer via script:
+
+```bash
+./scripts/docker/runTrainerDocker.sh
+```
+
+This script:
+- builds image `datasentinel-trainer:dev`
+- runs trainer container
+- mounts host `models/` to `/app/models` in the container
+
+## Output artifacts
+
+Trainer produces:
+- `models/model.onnx`
+- `models/config.json`
+
+These files are consumed by the C++ engine.
+
+## Notes
+
+- Producer currently sends valid vectors most of the time and invalid vectors periodically (for input validation testing)
+- ONNX export uses opset 18 in current trainer configuration

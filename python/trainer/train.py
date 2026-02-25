@@ -144,7 +144,7 @@ def export_onnx(model):
             "input": {0: "batch_size"},
             "output": {0: "batch_size"}
         },
-        opset_version=12
+        opset_version=18
     )
 
     print(f"Model exported to {MODEL_PATH}")

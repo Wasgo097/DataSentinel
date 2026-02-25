@@ -1,0 +1,9 @@
+.git
+.gitignore
+.vscode
+venv
+python/trainer/.venv
+cpp/Engine/build
+models
+__pycache__
+*.pyc
