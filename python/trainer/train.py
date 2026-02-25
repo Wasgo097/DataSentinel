@@ -65,9 +65,22 @@ def train(data: np.ndarray):
     dataset = TensorDataset(torch.from_numpy(data))
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda" if use_cuda else "cpu")
+    print(f"Device: {device}")
+
     model = Autoencoder(INPUT_DIM, LATENT_DIM)
+    model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = nn.MSELoss()
+
+    # Prefer new torch.amp API; keep fallback for older torch versions.
+    if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
+        scaler = torch.amp.GradScaler("cuda", enabled=use_cuda)
+        autocast = lambda: torch.amp.autocast("cuda", enabled=use_cuda)
+    else:
+        scaler = torch.cuda.amp.GradScaler(enabled=use_cuda)
+        autocast = lambda: torch.cuda.amp.autocast(enabled=use_cuda)
 
     print("Starting training...")
 
@@ -75,13 +88,16 @@ def train(data: np.ndarray):
         epoch_loss = 0.0
 
         for batch in dataloader:
-            x = batch[0]
+            x = batch[0].to(device)
 
             optimizer.zero_grad()
-            x_hat = model(x)
-            loss = criterion(x_hat, x)
-            loss.backward()
-            optimizer.step()
+            with autocast():
+                x_hat = model(x)
+                loss = criterion(x_hat, x)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             epoch_loss += loss.item()
 
@@ -97,8 +113,9 @@ def train(data: np.ndarray):
 
 def calculate_threshold(model, data):
     model.eval()
+    device = next(model.parameters()).device
     with torch.no_grad():
-        x = torch.from_numpy(data)
+        x = torch.from_numpy(data).to(device)
         x_hat = model(x)
         reconstruction_error = torch.mean((x_hat - x) ** 2, dim=1)
 
@@ -119,7 +136,9 @@ def calculate_threshold(model, data):
 # =========================
 
 def export_onnx(model):
+    # Export on CPU for maximum compatibility/stability.
     model.eval()
+    model.to("cpu")
 
     dummy_input = torch.randn(1, INPUT_DIM)
 
@@ -129,10 +148,6 @@ def export_onnx(model):
         MODEL_PATH,
         input_names=["input"],
         output_names=["output"],
-        dynamic_axes={
-            "input": {0: "batch_size"},
-            "output": {0: "batch_size"}
-        },
         opset_version=18
     )
 

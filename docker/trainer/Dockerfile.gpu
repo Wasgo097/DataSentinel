@@ -1,0 +1,41 @@
+# GPU-enabled trainer image (requires NVIDIA Container Toolkit on the host).
+# This image includes CUDA runtime and installs the CUDA-enabled PyTorch build.
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+# Python runtime settings:
+# - do not generate .pyc bytecode files
+# - flush logs immediately (useful in containers)
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Working directory inside the container.
+WORKDIR /app
+
+# Install Python and system deps.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        libgomp1 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install dependencies.
+# For GPU, install PyTorch with CUDA wheels; keep numpy/onnx tooling as usual.
+COPY python/trainer/requirements.txt /tmp/requirements.txt
+RUN python3 -m pip install --no-cache-dir --upgrade pip \
+    && python3 -m pip install --no-cache-dir -r /tmp/requirements.txt \
+    # Force-install CUDA-enabled torch build (so torch.cuda.is_available() can be true).
+    && python3 -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu124 torch
+
+# Copy trainer code + bundled data.
+COPY python/trainer/train.py /app/python/trainer/train.py
+COPY python/trainer/dataset.py /app/python/trainer/dataset.py
+COPY python/trainer/data /app/python/trainer/data
+
+# Output directory for artifacts (model.onnx + config.json).
+RUN mkdir -p /app/models
+
+# Default command: run training and export artifacts.
+CMD ["python3", "/app/python/trainer/train.py"]

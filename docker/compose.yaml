@@ -5,13 +5,50 @@ services:
   # One-off training job that writes ONNX artifacts to host models/.
   trainer:
     # Run as host user to avoid creating root-owned files in bind-mounted models/.
+    # Notes:
+    # - DS_UID/DS_GID are set by docker helper scripts (or default to 1000:1000).
+    # - Without this, bind-mounted `models/` can end up with root-owned files.
     user: "${DS_UID:-1000}:${DS_GID:-1000}"
     build:
       context: ..
       dockerfile: docker/trainer/Dockerfile
     image: datasentinel-trainer:dev
+    environment:
+      # Avoid torch dynamo/inductor trying to resolve username from /etc/passwd when running as host UID.
+      # Some torch components call getpass.getuser() which can fail if UID has no passwd entry.
+      TORCHINDUCTOR_CACHE_DIR: /tmp/torchinductor
+      XDG_CACHE_HOME: /tmp/.cache
+      HOME: /tmp
+      # getpass.getuser() prefers these env vars; avoids pwd.getpwuid() when UID has no /etc/passwd entry.
+      USER: datasentinel
+      LOGNAME: datasentinel
+      USERNAME: datasentinel
+    volumes:
+      # Persist artifacts on host for engine to consume.
+      - ../models:/app/models
+
+  # GPU trainer variant (use with: docker compose --profile gpu ...).
+  trainer-gpu:
+    # This service is not started by default; you must enable the profile.
+    profiles: ["gpu"]
+    user: "${DS_UID:-1000}:${DS_GID:-1000}"
+    build:
+      context: ..
+      dockerfile: docker/trainer/Dockerfile.gpu
+    image: datasentinel-trainer:gpu-dev
+    environment:
+      # Avoid torch dynamo/inductor trying to resolve username from /etc/passwd when running as host UID.
+      TORCHINDUCTOR_CACHE_DIR: /tmp/torchinductor
+      XDG_CACHE_HOME: /tmp/.cache
+      HOME: /tmp
+      # getpass.getuser() prefers these env vars; avoids pwd.getpwuid() when UID has no /etc/passwd entry.
+      USER: datasentinel
+      LOGNAME: datasentinel
+      USERNAME: datasentinel
     volumes:
       - ../models:/app/models
+    # Requires NVIDIA GPU + drivers + NVIDIA Container Toolkit.
+    gpus: all
 
   # C++ runtime service exposing TCP port 9000 and reading model files.
   engine:
@@ -22,6 +59,7 @@ services:
     ports:
       - "9000:9000"
     volumes:
+      # Read-only mount; engine should not modify artifacts.
       - ../models:/app/models:ro
 
   # Python client sending sample data to the engine service.

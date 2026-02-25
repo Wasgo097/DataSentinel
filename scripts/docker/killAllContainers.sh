@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 #set -euo pipefail
 
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+  echo "Do not source this script. Run: ./scripts/docker/killAllContainers.sh"
+  return 1
+fi
+
 # Collect IDs of all currently running containers.
 CONTAINERS="$(docker ps -q)"
 

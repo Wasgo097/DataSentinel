@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 #set -euo pipefail
 
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+  echo "Do not source this script. Run: ./scripts/docker/runProducerDocker.sh"
+  return 1
+fi
+
 # Resolve project root and compose file path.
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE_FILE="$PROJECT_ROOT/docker/compose.yaml"

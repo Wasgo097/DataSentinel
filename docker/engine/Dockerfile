@@ -3,6 +3,7 @@ FROM ubuntu:24.04 AS builder
 
 # ONNX Runtime version used during build.
 ARG ONNXRUNTIME_VERSION=1.24.2
+# Disable interactive apt prompts in non-interactive container builds.
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Build workspace inside the container.

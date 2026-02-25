@@ -19,9 +19,9 @@ DataSentinel is an anomaly detection prototype built from three parts:
 - Done: producer Docker image and run script
 - Done: `docker compose` stack for end-to-end startup
 
-### v3 - Data quality + GPU training (in progress)
+### v3 - Data quality + GPU training (completed)
 - Done: Train model on labeled dataset instead of synthetic random-only input
-- ToDo: Add GPU-accelerated training path for the trainer
+- Done: Add GPU-accelerated training path for the trainer
 
 ### v4 - Performance backend (planned)
 - ToDo: Add TensorRT-based inference path for C++ runtime
@@ -44,6 +44,7 @@ DataSentinel is an anomaly detection prototype built from three parts:
 
 - Docker Engine
 - Docker Compose plugin (`docker compose`)
+- NVIDIA Container Toolkit (only for GPU training)
 
 ## Repository layout
 
@@ -126,6 +127,12 @@ Minimal direct compose commands:
 docker compose -f docker/compose.yaml run --rm --build trainer
 docker compose -f docker/compose.yaml up --build engine producer
 docker compose -f docker/compose.yaml down
+```
+
+GPU trainer (optional):
+
+```bash
+DS_UID="$(id -u)" DS_GID="$(id -g)" docker compose -f docker/compose.yaml --profile gpu run --rm --build trainer-gpu
 ```
 
 ## Environment variables
