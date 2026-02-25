@@ -23,8 +23,8 @@ DataSentinel is an anomaly detection prototype built from three parts:
 - Done: Train model on labeled dataset instead of synthetic random-only input
 - Done: Add GPU-accelerated training path for the trainer
 
-### v4 - Performance backend (planned)
-- ToDo: Add TensorRT-based inference path for C++ runtime
+### v4 - Performance backend (In progress)
+- In progress: Add TensorRT-based inference path for C++ runtime
 - ToDo: Keep ONNX Runtime path as baseline and fallback
 
 ### v5 - Service protocol (planned)

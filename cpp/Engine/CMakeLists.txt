@@ -6,8 +6,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Boost REQUIRED COMPONENTS system)
 
-add_executable(${PROJECT_NAME} main.cpp)
-
 # Find ONNX Runtime (expects the package to provide a CMake config).
 # Priority:
 # 1) explicit -Donnxruntime_DIR=...
@@ -31,11 +29,25 @@ if(NOT DEFINED onnxruntime_DIR)
 endif()
 find_package(onnxruntime REQUIRED CONFIG)
 
+add_executable(${PROJECT_NAME}
+    main.cpp
+    src/AnomalyDetector.cpp
+    src/ClientSession.cpp
+    src/ConfigLoader.cpp
+    src/InferenceBackendFactory.cpp
+    src/InputParser.cpp
+    src/OnnxInferenceBackend.cpp
+    src/TcpServer.cpp
+    src/TensorRtInferenceBackend.cpp
+)
+
+target_include_directories(${PROJECT_NAME}
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
 target_link_libraries(${PROJECT_NAME}
     Boost::system
     onnxruntime::onnxruntime
 )
-
-# Ensure the header-only json.hpp in current directory is visible to the target and included in project sources
-target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
-target_sources(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/json.hpp")
