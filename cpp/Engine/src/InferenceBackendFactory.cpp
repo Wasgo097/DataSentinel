@@ -46,7 +46,14 @@ std::unique_ptr<IInferenceBackend> create_backend(BackendKind kind,
     case BackendKind::Onnx:
         return std::make_unique<OnnxInferenceBackend>(model_path);
     case BackendKind::TensorRt:
+#if DS_ENABLE_TENSORRT
         return std::make_unique<TensorRtInferenceBackend>(model_path);
+#else
+        (void)model_path;
+        throw std::runtime_error(
+            "TensorRT backend was requested, but this binary was built without TensorRT support. "
+            "Rebuild with -DDS_ENABLE_TENSORRT=ON.");
+#endif
     }
 
     throw std::runtime_error("Unknown backend kind");

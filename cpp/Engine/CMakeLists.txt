@@ -3,6 +3,13 @@ project(DataSentinelReceiver)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+option(DS_ENABLE_TENSORRT "Enable TensorRT backend support" OFF)
+
+if(DS_ENABLE_TENSORRT)
+    message(STATUS "DataSentinel Engine backend build: ONNX + TensorRT")
+else()
+    message(STATUS "DataSentinel Engine backend build: ONNX only")
+endif()
 
 find_package(Boost REQUIRED COMPONENTS system)
 
@@ -51,3 +58,44 @@ target_link_libraries(${PROJECT_NAME}
     Boost::system
     onnxruntime::onnxruntime
 )
+
+if(DS_ENABLE_TENSORRT)
+    find_package(CUDAToolkit REQUIRED)
+
+    find_path(TENSORRT_INCLUDE_DIR NvInfer.h
+        PATHS
+            /usr/include/x86_64-linux-gnu
+            /usr/include
+            /usr/local/include
+            /usr/local/TensorRT/include
+        REQUIRED
+    )
+
+    find_library(TENSORRT_NVINFER_LIB nvinfer
+        PATHS
+            /usr/lib/x86_64-linux-gnu
+            /usr/lib
+            /usr/local/lib
+            /usr/local/TensorRT/lib
+        REQUIRED
+    )
+
+    find_library(TENSORRT_NVONNXPARSER_LIB nvonnxparser
+        PATHS
+            /usr/lib/x86_64-linux-gnu
+            /usr/lib
+            /usr/local/lib
+            /usr/local/TensorRT/lib
+        REQUIRED
+    )
+
+    target_compile_definitions(${PROJECT_NAME} PRIVATE DS_ENABLE_TENSORRT=1)
+    target_include_directories(${PROJECT_NAME} PRIVATE "${TENSORRT_INCLUDE_DIR}")
+    target_link_libraries(${PROJECT_NAME}
+        CUDA::cudart
+        "${TENSORRT_NVINFER_LIB}"
+        "${TENSORRT_NVONNXPARSER_LIB}"
+    )
+else()
+    target_compile_definitions(${PROJECT_NAME} PRIVATE DS_ENABLE_TENSORRT=0)
+endif()

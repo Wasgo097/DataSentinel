@@ -92,11 +92,25 @@ Build C++ engine:
 ./scripts/buildEngine.sh
 ```
 
+`buildEngine.sh` auto-detects local TensorRT installation and sets:
+- `-DDS_ENABLE_TENSORRT=ON` when TensorRT is available
+- `-DDS_ENABLE_TENSORRT=OFF` otherwise
+
+Manual override is still possible, for example:
+`./scripts/buildEngine.sh -DDS_ENABLE_TENSORRT=ON`
+
 Run engine:
 
 ```bash
 ./scripts/runEngine.sh
 ```
+
+`runEngine.sh` auto-selects backend:
+- `tensorrt` if binary was built with TensorRT and runtime libraries are present
+- `onnx` otherwise
+
+You can still force backend manually:
+`DATASENTINEL_BACKEND=onnx ./scripts/runEngine.sh`
 
 Run producer (in another terminal):
 
@@ -137,10 +151,57 @@ DS_UID="$(id -u)" DS_GID="$(id -g)" docker compose -f docker/compose.yaml --prof
 
 ## Environment variables
 
+- `DATASENTINEL_BACKEND`
+  Engine backend selector. Supported values: `onnx`, `tensorrt` (aliases: `trt`, `tensor`).
+  Default: `onnx`.
 - `ENGINE_HOST`
   Producer target host. Default in Docker Compose: `engine`.
 - `ENGINE_PORT`
   Producer target port. Default: `9000`.
+
+## Engine backend build options (local, non-Docker)
+
+Default local build (auto-detection):
+
+```bash
+./scripts/buildEngine.sh
+```
+
+`buildEngine.sh` checks local TensorRT installation and chooses:
+- `-DDS_ENABLE_TENSORRT=ON` when TensorRT is available
+- `-DDS_ENABLE_TENSORRT=OFF` otherwise
+
+Force ONNX-only build:
+
+```bash
+./scripts/buildEngine.sh -DDS_ENABLE_TENSORRT=OFF
+```
+
+Force TensorRT-enabled build:
+
+```bash
+./scripts/buildEngine.sh -DDS_ENABLE_TENSORRT=ON
+```
+
+Run with selected backend:
+
+```bash
+DATASENTINEL_BACKEND=onnx ./cpp/Engine/build/DataSentinelReceiver
+DATASENTINEL_BACKEND=tensorrt ./cpp/Engine/build/DataSentinelReceiver
+```
+
+Run using helper script with auto backend selection:
+
+```bash
+./scripts/runEngine.sh
+```
+
+`runEngine.sh` chooses backend automatically:
+- `tensorrt` if binary was built with `DS_ENABLE_TENSORRT=ON` and TensorRT runtime libs are present
+- `onnx` otherwise (including ONNX-only build)
+
+If TensorRT backend is selected but binary was built without TensorRT support,
+engine exits with a clear error and asks to rebuild with `-DDS_ENABLE_TENSORRT=ON`.
 
 ## Output artifacts
 

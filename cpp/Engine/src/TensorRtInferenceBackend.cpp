@@ -6,8 +6,8 @@ namespace ds
 {
 TensorRtInferenceBackend::TensorRtInferenceBackend(const std::string &model_path)
 {
-    (void)model_path;
-    throw std::runtime_error("TensorRT backend is not implemented yet");
+    std::ignore = model_path;
+    throw std::runtime_error("TensorRT backend is not implemented yet for this build");
 }
 
 std::string TensorRtInferenceBackend::backend_name() const
@@ -22,7 +22,7 @@ std::size_t TensorRtInferenceBackend::expected_input_size() const
 
 std::vector<float> TensorRtInferenceBackend::reconstruct(const std::vector<float> &input)
 {
-    std::ignore = input;
-    throw std::runtime_error("TensorRT backend is not implemented yet");
+    (void)input;
+    throw std::runtime_error("TensorRT backend is not implemented yet for this build");
 }
 } // namespace ds
