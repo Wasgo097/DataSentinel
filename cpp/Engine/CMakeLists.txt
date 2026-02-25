@@ -45,6 +45,9 @@ add_executable(${PROJECT_NAME}
     src/InputParser.cpp
     src/OnnxInferenceBackend.cpp
     src/TcpServer.cpp
+    src/TensorRtEngineBuilder.cpp
+    src/TensorRtEnginePathResolver.cpp
+    src/TensorRtEngineStore.cpp
     src/TensorRtInferenceBackend.cpp
 )
 

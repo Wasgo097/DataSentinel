@@ -200,6 +200,12 @@ Run using helper script with auto backend selection:
 - `tensorrt` if binary was built with `DS_ENABLE_TENSORRT=ON` and TensorRT runtime libs are present
 - `onnx` otherwise (including ONNX-only build)
 
+When TensorRT backend starts, engine cache file is kept next to ONNX model in `models/`:
+- input ONNX: `models/model.onnx`
+- TensorRT engine cache: `models/model.engine`
+
+If `models/model.engine` does not exist, engine tries to build it automatically at startup.
+
 If TensorRT backend is selected but binary was built without TensorRT support,
 engine exits with a clear error and asks to rebuild with `-DDS_ENABLE_TENSORRT=ON`.
 
