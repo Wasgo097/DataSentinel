@@ -1,0 +1,40 @@
+# Compose project name (container/network prefix).
+name: datasentinel
+
+services:
+  # One-off training job that writes ONNX artifacts to host models/.
+  trainer:
+    build:
+      context: ..
+      dockerfile: docker/trainer/Dockerfile
+    image: datasentinel-trainer:dev
+    volumes:
+      - ../models:/app/models
+
+  # C++ runtime service exposing TCP port 9000 and reading model files.
+  engine:
+    build:
+      context: ..
+      dockerfile: docker/engine/Dockerfile
+    image: datasentinel-engine:dev
+    ports:
+      - "9000:9000"
+    volumes:
+      - ../models:/app/models:ro
+
+  # Python client sending sample data to the engine service.
+  producer:
+    build:
+      context: ..
+      dockerfile: docker/producer/Dockerfile
+    image: datasentinel-producer:dev
+    # Keep host.docker.internal available on Linux as well.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Default target inside compose network; override via env when needed.
+      ENGINE_HOST: ${ENGINE_HOST:-engine}
+      ENGINE_PORT: ${ENGINE_PORT:-9000}
+    # Start engine first when running producer in compose mode.
+    depends_on:
+      - engine

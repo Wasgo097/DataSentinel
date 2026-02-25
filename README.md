@@ -5,34 +5,41 @@ DataSentinel is an anomaly detection prototype built from three parts:
 - C++ engine that runs inference and serves a TCP endpoint
 - Python producer that sends sample data to the engine
 
-## Current status
-
-- Local prototype flow is implemented and working
-- Trainer Dockerization is implemented and working
-- Engine Dockerization is implemented
-- Producer Dockerization is implemented
-
 ## Roadmap
 
-### v1 - Local prototype (done)
-- Python trainer trains an autoencoder
-- Trainer exports `models/model.onnx` and `models/config.json`
-- C++ engine loads model/config and serves TCP on port `9000`
-- Python producer sends sample data to engine and prints responses
+### v1 - Local prototype (completed)
+- Done: Python trainer trains an autoencoder
+- Done: Trainer exports `models/model.onnx` and `models/config.json`
+- Done: C++ engine loads model/config and serves TCP on port `9000`
+- Done: Python producer sends sample data to engine and prints responses
 
-### v2 - Dockerization (in progress)
+### v2 - Dockerization (completed)
 - Done: trainer Docker image and run script
 - Done: engine Docker image and run script
 - Done: producer Docker image and run script
-- Next: add `docker-compose` for end-to-end startup
+- Done: `docker compose` stack for end-to-end startup
 
 ### v3 - Performance backend (planned)
-- Add TensorRT-based inference path for C++ runtime
-- Keep ONNX Runtime path as baseline and fallback
+- ToDo: Add TensorRT-based inference path for C++ runtime
+- ToDo: Keep ONNX Runtime path as baseline and fallback
 
 ### v4 - Service protocol (planned)
-- Replace raw TCP communication with gRPC
-- Add shared `.proto` contracts for C++ and Python services
+- ToDo: Add shared `.proto` contracts for C++ and Python services
+- ToDo: Replace raw TCP communication with gRPC
+
+## Local prerequisites
+
+- Linux environment
+- Python 3
+- CMake
+- C++ compiler with C++20 support
+- Boost (system)
+- ONNX Runtime (for C++ engine)
+
+## Docker prerequisites
+
+- Docker Engine
+- Docker Compose plugin (`docker compose`)
 
 ## Repository layout
 
@@ -48,23 +55,15 @@ models/
 
 ## Runtime flow
 
-1. Train model in Python (`python/trainer/train.py`)
-2. Export artifacts to `models/`:
+1. Train model in Python and export artifacts to `models/`:
    - `model.onnx`
    - `config.json`
-3. Start C++ engine (reads `models/`, listens on `TCP :9000`)
-4. Start Python producer (connects to engine and sends sample vectors)
+2. Start C++ engine (reads `models/`, listens on `TCP :9000`)
+3. Start Python producer (connects to engine and sends sample vectors)
 
-## Prerequisites (local run)
+## Run modes
 
-- Linux environment
-- Python 3
-- CMake
-- C++ compiler with C++20 support
-- Boost (system)
-- ONNX Runtime (for C++ engine)
-
-## Run locally (without Docker)
+### Local mode (without Docker)
 
 Run trainer:
 
@@ -90,49 +89,37 @@ Run producer (in another terminal):
 ./scripts/runProducer.sh
 ```
 
-## Trainer in Docker (implemented)
+### Docker mode (Compose-based)
 
-Build and run trainer via script:
+Prefer project scripts for day-to-day usage.
 
-```bash
-./scripts/docker/runTrainerDocker.sh
-```
+Run full stack (preferred):
+- `./scripts/docker/upDockerStack.sh`
+- `./scripts/docker/downDockerStack.sh`
 
-This script:
-- builds image `datasentinel-trainer:dev`
-- runs trainer container
-- mounts host `models/` to `/app/models` in the container
+What `upDockerStack.sh` does:
+1. Runs `trainer` as a one-off job to generate `models/model.onnx` and `models/config.json`
+2. Starts `engine` and `producer` services
 
-## Engine in Docker (implemented)
+Run single Docker services:
+- `./scripts/docker/runTrainerDocker.sh` - build/run one-off trainer
+- `./scripts/docker/runEngineDocker.sh` - build/start engine on port `9000`
+- `./scripts/docker/runProducerDocker.sh` - build/run producer client
 
-Build and run engine via script:
-
-```bash
-./scripts/docker/runEngineDocker.sh
-```
-
-This script:
-- builds image `datasentinel-engine:dev`
-- runs engine container on port `9000`
-- mounts host `models/` to `/app/models` (read-only) in the container
-
-## Producer in Docker (implemented)
-
-Build and run producer via script:
+Minimal direct compose commands:
 
 ```bash
-./scripts/docker/runProducerDocker.sh
+docker compose -f docker/compose.yaml run --rm --build trainer
+docker compose -f docker/compose.yaml up --build engine producer
+docker compose -f docker/compose.yaml down
 ```
 
-By default producer uses:
-- `ENGINE_HOST=host.docker.internal`
-- `ENGINE_PORT=9000`
+## Environment variables
 
-You can override target host/port:
-
-```bash
-ENGINE_HOST=127.0.0.1 ENGINE_PORT=9000 ./scripts/docker/runProducerDocker.sh
-```
+- `ENGINE_HOST`
+  Producer target host. Default in Docker Compose: `engine`.
+- `ENGINE_PORT`
+  Producer target port. Default: `9000`.
 
 ## Output artifacts
 
@@ -142,8 +129,24 @@ Trainer produces:
 
 These files are consumed by the C++ engine.
 
-## Notes
 
-- Producer currently sends valid vectors most of the time and invalid vectors periodically (for input validation testing)
-- Producer host/port can be configured with `ENGINE_HOST` and `ENGINE_PORT`
-- ONNX export uses opset 18 in current trainer configuration
+## Troubleshooting
+
+- `Bind for :::9000 failed: port is already allocated`
+  Another process/container uses port `9000`. Stop conflicting container (`docker ps`, then `docker stop <id>`) or use a different host port mapping.
+
+- Engine exits because model files are missing
+  Run trainer first (`./scripts/docker/runTrainerDocker.sh` or `./scripts/runTrainer.sh`) and verify `models/model.onnx` + `models/config.json` exist.
+
+- Need custom producer target host/port
+  Use `ENGINE_HOST` and `ENGINE_PORT`, for example:
+  `ENGINE_HOST=127.0.0.1 ENGINE_PORT=9000 ./scripts/docker/runProducerDocker.sh`.
+
+- Need local non-Docker flow
+  Use `./scripts/runTrainer.sh`, `./scripts/buildEngine.sh`, `./scripts/runEngine.sh`, `./scripts/runProducer.sh`.
+
+- `Ctrl+C` does not clean up everything from Compose runs
+  Run `./scripts/docker/downDockerStack.sh`.
+
+- Need to force-stop all running containers
+  Run `./scripts/docker/killAllContainers.sh`.

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #set -euo pipefail
 
+# Collect IDs of all currently running containers.
 CONTAINERS="$(docker ps -q)"
 
 if [ -z "$CONTAINERS" ]; then
@@ -8,6 +9,7 @@ if [ -z "$CONTAINERS" ]; then
   exit 0
 fi
 
+# Force-stop all running containers.
 echo "Killing all running containers..."
 docker kill $CONTAINERS
 echo "All running containers were killed."

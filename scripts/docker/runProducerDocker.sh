@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
-set -euo pipefail
+#set -euo pipefail
 
+# Resolve project root and compose file path.
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE_NAME="datasentinel-producer:dev"
-DOCKERFILE_PATH="$PROJECT_ROOT/docker/producer/Dockerfile"
-ENGINE_HOST="${ENGINE_HOST:-host.docker.internal}"
+COMPOSE_FILE="$PROJECT_ROOT/docker/compose.yaml"
+# Producer target can be overridden from environment.
+ENGINE_HOST="${ENGINE_HOST:-engine}"
 ENGINE_PORT="${ENGINE_PORT:-9000}"
 
 echo "Project root: $PROJECT_ROOT"
-echo "Building producer image: $IMAGE_NAME"
-docker build -f "$DOCKERFILE_PATH" -t "$IMAGE_NAME" "$PROJECT_ROOT"
-
-echo "Image build completed. Starting producer container..."
+echo "Compose file: $COMPOSE_FILE"
 echo "Producer target: ${ENGINE_HOST}:${ENGINE_PORT}"
 
-docker run --rm \
-  --add-host=host.docker.internal:host-gateway \
-  -e ENGINE_HOST="$ENGINE_HOST" \
-  -e ENGINE_PORT="$ENGINE_PORT" \
-  "$IMAGE_NAME"
+if [ "$ENGINE_HOST" = "engine" ]; then
+  # Default compose-network mode: allow producer dependency on engine service.
+  echo "Running producer via docker compose (engine dependency enabled)..."
+  ENGINE_HOST="$ENGINE_HOST" ENGINE_PORT="$ENGINE_PORT" \
+    docker compose -f "$COMPOSE_FILE" run --rm --build producer
+else
+  # External target mode: do not auto-start engine service.
+  echo "Running producer via docker compose without engine dependency..."
+  ENGINE_HOST="$ENGINE_HOST" ENGINE_PORT="$ENGINE_PORT" \
+    docker compose -f "$COMPOSE_FILE" run --rm --build --no-deps producer
+fi

@@ -4,15 +4,16 @@
 # Resolve project root and compose file path.
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE_FILE="$PROJECT_ROOT/docker/compose.yaml"
-MODELS_DIR="$PROJECT_ROOT/models"
 
 echo "Project root: $PROJECT_ROOT"
 echo "Compose file: $COMPOSE_FILE"
 
-mkdir -p "$MODELS_DIR"
+mkdir -p "$PROJECT_ROOT/models"
 
-# Run trainer as one-off compose job and rebuild image if needed.
-echo "Building and running trainer via docker compose..."
+# Prepare model artifacts first.
+echo "Running trainer one-off job..."
 docker compose -f "$COMPOSE_FILE" run --rm --build trainer
 
-echo "Trainer run completed."
+# Start runtime services.
+echo "Starting engine and producer..."
+docker compose -f "$COMPOSE_FILE" up --build engine producer

@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
 #set -euo pipefail
 
+# Resolve project root and compose file path.
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE_NAME="datasentinel-engine:dev"
-DOCKERFILE_PATH="$PROJECT_ROOT/docker/engine/Dockerfile"
+COMPOSE_FILE="$PROJECT_ROOT/docker/compose.yaml"
 MODELS_DIR="$PROJECT_ROOT/models"
 
 echo "Project root: $PROJECT_ROOT"
-echo "Building engine image: $IMAGE_NAME"
-docker build -f "$DOCKERFILE_PATH" -t "$IMAGE_NAME" "$PROJECT_ROOT"
-
-echo "Image build completed. Starting engine container..."
+echo "Compose file: $COMPOSE_FILE"
 
 mkdir -p "$MODELS_DIR"
 
-echo "Running engine container on port 9000..."
-docker run --rm \
-  -p 9000:9000 \
-  -v "$MODELS_DIR:/app/models:ro" \
-  "$IMAGE_NAME"
+# Start engine in attached mode (Ctrl+C to stop).
+echo "Building and starting engine via docker compose on port 9000..."
+docker compose -f "$COMPOSE_FILE" up --build engine
