@@ -75,5 +75,10 @@ if [[ -z "${DATASENTINEL_BACKEND:-}" ]]; then
   fi
 fi
 
+if [[ -z "${DATASENTINEL_PROTOCOL:-}" ]]; then
+  export DATASENTINEL_PROTOCOL="tcp"
+fi
+
 echo "Running engine with DATASENTINEL_BACKEND=$DATASENTINEL_BACKEND"
+echo "Running engine with DATASENTINEL_PROTOCOL=$DATASENTINEL_PROTOCOL"
 "$BIN" "$@"

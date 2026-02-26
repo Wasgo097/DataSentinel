@@ -15,6 +15,10 @@ RUN apt-get update \
         build-essential \
         cmake \
         libboost-system-dev \
+        libprotobuf-dev \
+        protobuf-compiler \
+        protobuf-compiler-grpc \
+        libgrpc++-dev \
         ca-certificates \
         wget \
         tar \
@@ -34,6 +38,7 @@ RUN wget -q "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXR
 
 # Copy engine source code into the build stage.
 COPY cpp/Engine /src/cpp/Engine
+COPY proto /src/proto
 
 # Locate ONNX Runtime CMake config and build the engine binary.
 RUN ONNX_CMAKE_DIR="$(find /opt/onnxruntime -type d -path '*/cmake/onnxruntime' | head -n1)" \
@@ -53,6 +58,8 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libboost-system-dev \
+        libprotobuf-dev \
+        libgrpc++-dev \
         libstdc++6 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*

@@ -2,15 +2,15 @@
 
 DataSentinel is an anomaly detection prototype built from three parts:
 - Python trainer that trains an autoencoder and exports ONNX artifacts
-- C++ engine that runs inference and serves a TCP endpoint
-- Python producer that sends sample data to the engine
+- C++ engine that runs inference and serves TCP or gRPC endpoint
+- Python producer that sends sample data to the engine over TCP or gRPC
 
 ## Roadmap
 
 ### v1 - Local prototype (completed)
 - Done: Python trainer trains an autoencoder
 - Done: Trainer exports `models/model.onnx` and `models/config.json`
-- Done: C++ engine loads model/config and serves TCP on port `9000`
+- Done: C++ engine loads model/config and serves gRPC on port `9000`
 - Done: Python producer sends sample data to engine and prints responses
 
 ### v2 - Dockerization (completed)
@@ -27,9 +27,10 @@ DataSentinel is an anomaly detection prototype built from three parts:
 - Done: Add TensorRT-based inference path for C++ runtime
 - Done: Keep ONNX Runtime path as baseline and fallback
 
-### v5 - Service protocol (planned)
-- ToDo: Add shared `.proto` contracts for C++ and Python services
-- ToDo: Replace raw TCP communication with gRPC
+### v5 - Service protocol (completed)
+- Done: Add shared `.proto` contracts for C++ and Python services
+- Done: Replace raw TCP communication with gRPC
+- Done: Keep backward compatibility via protocol switch (`DATASENTINEL_PROTOCOL=tcp|grpc`)
 
 ## Local prerequisites
 
@@ -39,6 +40,7 @@ DataSentinel is an anomaly detection prototype built from three parts:
 - C++ compiler with C++20 support
 - Boost (system)
 - ONNX Runtime (for C++ engine)
+- Protobuf + gRPC C++ development packages (`protobuf`, `protoc`, `gRPC`)
 
 ## Docker prerequisites
 
@@ -67,7 +69,7 @@ models/
 1. Train model in Python and export artifacts to `models/`:
    - `model.onnx`
    - `config.json`
-2. Start C++ engine (reads `models/`, listens on `TCP :9000`)
+2. Start C++ engine (reads `models/`, listens on `:9000`; protocol from `DATASENTINEL_PROTOCOL`)
 3. Start Python producer (connects to engine and sends sample vectors)
 
 ## Dataset format (V3)
@@ -127,11 +129,19 @@ Run engine:
 You can still force backend manually:
 `DATASENTINEL_BACKEND=onnx ./scripts/runEngine.sh`
 
+Protocol can be selected independently:
+`DATASENTINEL_PROTOCOL=tcp ./scripts/runEngine.sh`
+`DATASENTINEL_PROTOCOL=grpc ./scripts/runEngine.sh`
+
 Run producer (in another terminal):
 
 ```bash
 ./scripts/runProducer.sh
 ```
+
+Producer protocol switch (must match engine):
+`DATASENTINEL_PROTOCOL=tcp ./scripts/runProducer.sh`
+`DATASENTINEL_PROTOCOL=grpc ./scripts/runProducer.sh`
 
 ### Docker mode (Compose-based)
 
@@ -189,6 +199,9 @@ DS_UID="$(id -u)" DS_GID="$(id -g)" docker compose -f docker/compose.yaml --prof
 - `DATASENTINEL_BACKEND`
   Engine backend selector. Supported values: `onnx`, `tensorrt` (aliases: `trt`, `tensor`).
   Default: `onnx`.
+- `DATASENTINEL_PROTOCOL`
+  Transport protocol selector for engine/producer. Supported values: `tcp`, `grpc`.
+  Default: `tcp` (backward-compatible mode).
 - `DATASENTINEL_ENV_INITIALIZED`
   Set to `1` by `source ./scripts/initEnv.sh`. All runtime/build scripts check this variable
   (except cleanup/kill/down helper scripts).

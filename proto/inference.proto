@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package datasentinel.v1;
+
+service InferenceService {
+  rpc Evaluate(EvaluateRequest) returns (EvaluateResponse) {}
+}
+
+message EvaluateRequest {
+  repeated float values = 1;
+}
+
+message EvaluateResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    OK = 1;
+    ANOMALY = 2;
+    ERROR = 3;
+  }
+
+  Status status = 1;
+  double mse = 2;
+  string message = 3;
+}

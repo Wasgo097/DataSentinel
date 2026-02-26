@@ -15,7 +15,8 @@ TRT_RUNTIME_IMAGE="${TRT_RUNTIME_IMAGE:-datasentinel-trt-runtime:dev}"
 
 unset DATASENTINEL_ENV_INITIALIZED DATASENTINEL_GPU_AVAILABLE DATASENTINEL_TRT_DEB_AVAILABLE \
   DATASENTINEL_TRT_BASE_IMAGES_READY DATASENTINEL_TRT_AVAILABLE DATASENTINEL_TRAINER_SERVICE \
-  DATASENTINEL_ENGINE_SERVICE DATASENTINEL_ENGINE_HOST
+  DATASENTINEL_ENGINE_SERVICE DATASENTINEL_ENGINE_HOST DATASENTINEL_GRPC_AVAILABLE \
+  DATASENTINEL_PROTOCOL
 
 can_use_nvidia_gpu() {
   if ! command -v nvidia-smi >/dev/null 2>&1; then
@@ -27,6 +28,54 @@ can_use_nvidia_gpu() {
   if ! docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
     return 1
   fi
+  return 0
+}
+
+detect_grpc_local() {
+  local grpc_config_paths=(
+    "/usr/lib/x86_64-linux-gnu/cmake/grpc/gRPCConfig.cmake"
+    "/usr/lib/cmake/grpc/gRPCConfig.cmake"
+    "/usr/local/lib/cmake/grpc/gRPCConfig.cmake"
+    "/usr/local/lib64/cmake/grpc/gRPCConfig.cmake"
+  )
+
+  local protobuf_config_paths=(
+    "/usr/lib/x86_64-linux-gnu/cmake/protobuf/protobuf-config.cmake"
+    "/usr/lib/cmake/protobuf/protobuf-config.cmake"
+    "/usr/local/lib/cmake/protobuf/protobuf-config.cmake"
+    "/usr/local/lib64/cmake/protobuf/protobuf-config.cmake"
+  )
+
+  local found_grpc_config=0
+  local found_protobuf_config=0
+  local p
+
+  for p in "${grpc_config_paths[@]}"; do
+    if [ -f "$p" ]; then
+      found_grpc_config=1
+      break
+    fi
+  done
+
+  for p in "${protobuf_config_paths[@]}"; do
+    if [ -f "$p" ]; then
+      found_protobuf_config=1
+      break
+    fi
+  done
+
+  if [ "$found_grpc_config" -ne 1 ] || [ "$found_protobuf_config" -ne 1 ]; then
+    return 1
+  fi
+
+  if ! command -v protoc >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if ! command -v grpc_cpp_plugin >/dev/null 2>&1; then
+    return 1
+  fi
+
   return 0
 }
 
@@ -122,6 +171,16 @@ if [ "$DATASENTINEL_TRT_AVAILABLE" = "1" ]; then
   DATASENTINEL_ENGINE_HOST="engine-trt"
 fi
 
+DATASENTINEL_GRPC_AVAILABLE=0
+if detect_grpc_local; then
+  DATASENTINEL_GRPC_AVAILABLE=1
+fi
+
+DATASENTINEL_PROTOCOL="tcp"
+if [ "$DATASENTINEL_GRPC_AVAILABLE" = "1" ]; then
+  DATASENTINEL_PROTOCOL="grpc"
+fi
+
 export TRT_DEVEL_IMAGE
 export TRT_RUNTIME_IMAGE
 export DATASENTINEL_ENV_INITIALIZED=1
@@ -133,6 +192,8 @@ export DATASENTINEL_TRT_AVAILABLE
 export DATASENTINEL_TRAINER_SERVICE
 export DATASENTINEL_ENGINE_SERVICE
 export DATASENTINEL_ENGINE_HOST
+export DATASENTINEL_GRPC_AVAILABLE
+export DATASENTINEL_PROTOCOL
 
 echo "Environment initialized:"
 echo "  DATASENTINEL_GPU_AVAILABLE=$DATASENTINEL_GPU_AVAILABLE"
@@ -142,6 +203,8 @@ echo "  DATASENTINEL_TRT_AVAILABLE=$DATASENTINEL_TRT_AVAILABLE"
 echo "  DATASENTINEL_TRAINER_SERVICE=$DATASENTINEL_TRAINER_SERVICE"
 echo "  DATASENTINEL_ENGINE_SERVICE=$DATASENTINEL_ENGINE_SERVICE"
 echo "  DATASENTINEL_ENGINE_HOST=$DATASENTINEL_ENGINE_HOST"
+echo "  DATASENTINEL_GRPC_AVAILABLE=$DATASENTINEL_GRPC_AVAILABLE"
+echo "  DATASENTINEL_PROTOCOL=$DATASENTINEL_PROTOCOL"
 echo "Detected configuration:"
 echo "  project_root=$DATASENTINEL_PROJECT_ROOT"
 echo "  tensor_deb_path=$TENSORRT_REPO_DEB"
@@ -154,3 +217,5 @@ echo "  trt_available=$DATASENTINEL_TRT_AVAILABLE"
 echo "  trainer_service=$DATASENTINEL_TRAINER_SERVICE"
 echo "  engine_service=$DATASENTINEL_ENGINE_SERVICE"
 echo "  engine_host=$DATASENTINEL_ENGINE_HOST"
+echo "  grpc_available=$DATASENTINEL_GRPC_AVAILABLE"
+echo "  protocol=$DATASENTINEL_PROTOCOL"

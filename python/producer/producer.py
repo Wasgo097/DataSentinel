@@ -1,10 +1,14 @@
-import socket
-import time
-import random
 import os
+import random
+import socket
+import sys
+import time
+from pathlib import Path
 
 HOST = os.getenv("ENGINE_HOST", "127.0.0.1")
 PORT = int(os.getenv("ENGINE_PORT", "9000"))
+PROTOCOL = os.getenv("DATASENTINEL_PROTOCOL", "tcp").strip().lower()
+TARGET = f"{HOST}:{PORT}"
 
 # Model expects 8 float values
 EXPECTED_INPUT_SIZE = 8
@@ -42,65 +46,140 @@ def generate_anomaly_data():
 
 
 def generate_invalid_data():
-    """Generate invalid data with wrong number of elements (4 instead of 8, max 3 decimal places)"""
+    """Generate invalid data with wrong number of elements (4 instead of 8, max 3 decimal places)."""
     return [round(random.uniform(0.0, 100.0), 3) for _ in range(EXPECTED_INPUT_SIZE // 2)]
 
 
-def main():
+def next_payload(message_count):
+    if message_count % 10 == 9:
+        data = generate_invalid_data()
+        print(f"[Producer] Sending INVALID data ({len(data)} elements): {data}")
+        return data, 0
+
+    if random.random() < ANOMALY_RATE:
+        data = generate_anomaly_data()
+        print(f"[Producer] Sending ANOMALY ({len(data)} elements): {data}")
+    else:
+        data = generate_data()
+        print(f"[Producer] Sending ({len(data)} elements): {data}")
+
+    return data, message_count + 1
+
+
+def run_tcp():
     message_count = 0
-    s = None
-    
+    sock = None
+    print(f"[Producer] Protocol: tcp, target: {TARGET}")
+
     while True:
         try:
-            # Connect only if not connected
-            if s is None:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.connect((HOST, PORT))
+            if sock is None:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((HOST, PORT))
                 print("[Producer] Connected to Engine.")
 
-            # Send invalid data every 10 messages
-            if message_count % 10 == 9:
-                data = generate_invalid_data()
-                print(f"[Producer] Sending INVALID data ({len(data)} elements): {data}")
-                message_count = 0  # reset count after sending invalid data
-            else:
-                if random.random() < ANOMALY_RATE:
-                    data = generate_anomaly_data()
-                    print(f"[Producer] Sending ANOMALY ({len(data)} elements): {data}")
-                else:
-                    data = generate_data()
-                    print(f"[Producer] Sending ({len(data)} elements): {data}")
-            
-            # Format: space-separated float values with newline
+            data, message_count = next_payload(message_count)
             message = " ".join(f"{value:.3f}" for value in data) + "\n"
-            s.sendall(message.encode())
+            sock.sendall(message.encode())
 
-            response = s.recv(4096)
+            response = sock.recv(4096)
             print("[Producer] Received:", response.decode().strip())
-            
-            message_count += 1
             time.sleep(1)
 
         except ConnectionRefusedError:
             print("[Producer] Engine not running. Retrying in 3 seconds...")
-            if s is not None:
-                s.close()
-                s = None
+            if sock is not None:
+                sock.close()
+                sock = None
             time.sleep(3)
-        
+
         except ConnectionResetError:
             print("[Producer] Connection lost. Reconnecting...")
-            if s is not None:
-                s.close()
-                s = None
+            if sock is not None:
+                sock.close()
+                sock = None
             time.sleep(1)
-        
+
         except Exception as e:
             print("[Producer] Error:", e)
-            if s is not None:
-                s.close()
-                s = None
+            if sock is not None:
+                sock.close()
+                sock = None
             time.sleep(1)
+
+
+def run_grpc():
+    import grpc
+
+    generated_dir = Path(__file__).resolve().parent / "generated"
+    if str(generated_dir) not in sys.path:
+        sys.path.insert(0, str(generated_dir))
+
+    import inference_pb2
+    import inference_pb2_grpc
+
+    message_count = 0
+    channel = None
+    stub = None
+    print(f"[Producer] Protocol: grpc, target: {TARGET}")
+
+    while True:
+        try:
+            if stub is None:
+                channel = grpc.insecure_channel(TARGET)
+                grpc.channel_ready_future(channel).result(timeout=3.0)
+                stub = inference_pb2_grpc.InferenceServiceStub(channel)
+                print(f"[Producer] Connected to Engine gRPC at {TARGET}.")
+
+            data, message_count = next_payload(message_count)
+            request = inference_pb2.EvaluateRequest(values=data)
+            response = stub.Evaluate(request, timeout=5.0)
+            status_name = inference_pb2.EvaluateResponse.Status.Name(response.status)
+
+            if response.status == inference_pb2.EvaluateResponse.ERROR:
+                print(f"[Producer] Received ERROR: {response.message}")
+            else:
+                print(
+                    f"[Producer] Received: status={status_name}, mse={response.mse:.6f}, message={response.message}"
+                )
+
+            time.sleep(1)
+
+        except grpc.FutureTimeoutError:
+            print(f"[Producer] Engine gRPC {TARGET} not ready. Retrying in 3 seconds...")
+            stub = None
+            if channel is not None:
+                channel.close()
+                channel = None
+            time.sleep(3)
+
+        except grpc.RpcError as e:
+            print(f"[Producer] gRPC error: {e.code().name} - {e.details()}")
+            stub = None
+            if channel is not None:
+                channel.close()
+                channel = None
+            time.sleep(1)
+
+        except Exception as e:
+            print("[Producer] Error:", e)
+            stub = None
+            if channel is not None:
+                channel.close()
+                channel = None
+            time.sleep(1)
+
+
+def main():
+    if PROTOCOL == "tcp":
+        run_tcp()
+        return
+
+    if PROTOCOL == "grpc":
+        run_grpc()
+        return
+
+    raise ValueError(f"Unsupported DATASENTINEL_PROTOCOL={PROTOCOL}. Supported values: tcp, grpc")
 
 
 if __name__ == "__main__":

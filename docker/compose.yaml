@@ -50,12 +50,14 @@ services:
     # Requires NVIDIA GPU + drivers + NVIDIA Container Toolkit.
     gpus: all
 
-  # C++ runtime service exposing TCP port 9000 and reading model files.
+  # C++ runtime service exposing gRPC port 9000 and reading model files.
   engine:
     build:
       context: ..
       dockerfile: docker/engine/Dockerfile
     image: datasentinel-engine:dev
+    environment:
+      DATASENTINEL_PROTOCOL: ${DATASENTINEL_PROTOCOL:-tcp}
     ports:
       - "9000:9000"
     volumes:
@@ -73,6 +75,7 @@ services:
     image: datasentinel-engine-trt:dev
     environment:
       DATASENTINEL_BACKEND: tensorrt
+      DATASENTINEL_PROTOCOL: ${DATASENTINEL_PROTOCOL:-tcp}
     ports:
       - "9000:9000"
     volumes:
@@ -89,6 +92,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      DATASENTINEL_PROTOCOL: ${DATASENTINEL_PROTOCOL:-tcp}
       # Default target inside compose network; override via env when needed.
       ENGINE_HOST: ${ENGINE_HOST:-engine}
       ENGINE_PORT: ${ENGINE_PORT:-9000}
