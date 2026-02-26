@@ -144,20 +144,21 @@ mkdir -p docker/engine/deps
 cp /path/to/nv-tensorrt-local-repo-ubuntu2404-*.deb docker/engine/deps/
 ```
 
-Run full stack:
+Run Docker stack in two steps:
 - `source ./scripts/initEnv.sh`
+- `./scripts/docker/runTrainerDocker.sh`
 - `./scripts/docker/upDockerStack.sh`
 - `./scripts/docker/downDockerStack.sh`
 
 What `upDockerStack.sh` does:
-1. Runs `trainer` as a one-off job to generate `models/model.onnx` and `models/config.json`
-2. Starts engine + producer:
+1. Starts engine + producer:
    - `engine-trt` when `initEnv.sh` detected GPU + TensorRT readiness
    - otherwise `engine` (ONNX)
+2. Does not run trainer. Run `runTrainerDocker.sh` first to generate/update `models/model.onnx` and `models/config.json`.
 
 Run single Docker services:
 - `source ./scripts/initEnv.sh` - initialize current shell env and prepare TensorRT base images (if needed)
-- `./scripts/docker/runTrainerDocker.sh` - build/run one-off trainer
+- `./scripts/docker/runTrainerDocker.sh` - build/run one-off trainer (`auto`, `--gpu`, `--cpu`)
 - `./scripts/docker/runEngineDocker.sh` - auto-select engine:
   - `engine-trt` when `DATASENTINEL_TRT_AVAILABLE=1`
   - otherwise `engine` (ONNX)

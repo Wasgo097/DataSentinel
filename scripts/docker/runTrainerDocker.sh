@@ -23,8 +23,38 @@ echo "Compose file: $COMPOSE_FILE"
 
 mkdir -p "$MODELS_DIR"
 
-# Run trainer as one-off compose job and rebuild image if needed.
-TRAINER_SERVICE="${DATASENTINEL_TRAINER_SERVICE:-trainer}"
+# Usage:
+# - ./scripts/docker/runTrainerDocker.sh            (auto: GPU if available, else CPU)
+# - ./scripts/docker/runTrainerDocker.sh --gpu      (prefer GPU based on initEnv variables)
+# - ./scripts/docker/runTrainerDocker.sh --cpu      (force CPU)
+# - GPU=1 ./scripts/docker/runTrainerDocker.sh      (same as --gpu)
+# - GPU=0 ./scripts/docker/runTrainerDocker.sh      (same as --cpu)
+MODE="auto" # auto | gpu | cpu
+if [ "${GPU:-}" = "1" ]; then
+  MODE="gpu"
+elif [ "${GPU:-}" = "0" ]; then
+  MODE="cpu"
+fi
+if [ "${1:-}" = "--gpu" ]; then
+  MODE="gpu"
+elif [ "${1:-}" = "--cpu" ]; then
+  MODE="cpu"
+fi
+
+TRAINER_SERVICE="$DATASENTINEL_TRAINER_SERVICE"
+if [ "$MODE" = "cpu" ]; then
+  TRAINER_SERVICE="trainer"
+elif [ "$MODE" = "gpu" ]; then
+  if [ "${DATASENTINEL_GPU_AVAILABLE:-0}" = "1" ]; then
+    TRAINER_SERVICE="trainer-gpu"
+  else
+    TRAINER_SERVICE="trainer"
+    echo "GPU mode fallback: DATASENTINEL_GPU_AVAILABLE=0, using CPU trainer."
+  fi
+else
+  echo "Auto mode: using initEnv selection ($TRAINER_SERVICE)."
+fi
+
 echo "Building and running ${TRAINER_SERVICE} via docker compose..."
 if [ "$TRAINER_SERVICE" = "trainer-gpu" ]; then
   DS_UID="$(id -u)" DS_GID="$(id -g)" docker compose -f "$COMPOSE_FILE" --profile gpu run --rm --build trainer-gpu

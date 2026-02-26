@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+#set -euo pipefail
 
 if [ "${BASH_SOURCE[0]}" != "$0" ]; then
   echo "Do not source this script. Run: ./scripts/docker/upDockerStack.sh"
@@ -40,23 +40,13 @@ elif [ "${1:-}" = "--cpu" ]; then
   MODE="cpu"
 fi
 
-TRAINER_SERVICE="$DATASENTINEL_TRAINER_SERVICE"
 ENGINE_SERVICE="$DATASENTINEL_ENGINE_SERVICE"
 PRODUCER_ENGINE_HOST="$DATASENTINEL_ENGINE_HOST"
 
-# Prepare model artifacts first.
-echo "Running trainer one-off job..."
 if [ "$MODE" = "cpu" ]; then
-  TRAINER_SERVICE="trainer"
   ENGINE_SERVICE="engine"
   PRODUCER_ENGINE_HOST="engine"
 elif [ "$MODE" = "gpu" ]; then
-  if [ "${DATASENTINEL_GPU_AVAILABLE:-0}" = "1" ]; then
-    TRAINER_SERVICE="trainer-gpu"
-  else
-    TRAINER_SERVICE="trainer"
-    echo "GPU mode fallback: DATASENTINEL_GPU_AVAILABLE=0, using CPU trainer."
-  fi
   if [ "${DATASENTINEL_TRT_AVAILABLE:-0}" = "1" ]; then
     ENGINE_SERVICE="engine-trt"
     PRODUCER_ENGINE_HOST="engine-trt"
@@ -67,12 +57,6 @@ elif [ "$MODE" = "gpu" ]; then
   fi
 else
   echo "Auto mode: using initEnv selection."
-fi
-
-if [ "$TRAINER_SERVICE" = "trainer-gpu" ]; then
-  DS_UID="$(id -u)" DS_GID="$(id -g)" docker compose -f "$COMPOSE_FILE" --profile gpu run --rm --build trainer-gpu
-else
-  DS_UID="$(id -u)" DS_GID="$(id -g)" docker compose -f "$COMPOSE_FILE" run --rm --build trainer
 fi
 
 echo "Runtime selection: $ENGINE_SERVICE"
