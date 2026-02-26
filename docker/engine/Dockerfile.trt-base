@@ -1,0 +1,28 @@
+# TensorRT-enabled base images used by docker/engine/Dockerfile.trt.
+# Build once, then reuse to avoid re-processing the local TensorRT repo package
+# for every engine build.
+
+ARG CUDA_VERSION=12.6.3
+ARG TENSORRT_REPO_DEB=docker/engine/deps/nv-tensorrt-local-repo-ubuntu2404-10.15.1-cuda-12.9_1.0-1_amd64.deb
+
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04 AS trt-devel
+ARG TENSORRT_REPO_DEB
+ENV DEBIAN_FRONTEND=noninteractive
+
+COPY ${TENSORRT_REPO_DEB} /tmp/tensorrt-local-repo.deb
+RUN dpkg -i /tmp/tensorrt-local-repo.deb \
+    && cp /var/nv-tensorrt-local-repo-*/*-keyring.gpg /usr/share/keyrings/ \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends tensorrt ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu24.04 AS trt-runtime
+ARG TENSORRT_REPO_DEB
+ENV DEBIAN_FRONTEND=noninteractive
+
+COPY ${TENSORRT_REPO_DEB} /tmp/tensorrt-local-repo.deb
+RUN dpkg -i /tmp/tensorrt-local-repo.deb \
+    && cp /var/nv-tensorrt-local-repo-*/*-keyring.gpg /usr/share/keyrings/ \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends tensorrt ca-certificates \
+    && rm -rf /var/lib/apt/lists/*

@@ -68,7 +68,8 @@ services:
       context: ..
       dockerfile: docker/engine/Dockerfile.trt
       args:
-        TENSORRT_REPO_DEB: ${TENSORRT_REPO_DEB:-docker/engine/deps/nv-tensorrt-local-repo-ubuntu2404-10.15.1-cuda-12.9_1.0-1_amd64.deb}
+        TRT_DEVEL_IMAGE: ${TRT_DEVEL_IMAGE:-datasentinel-trt-devel:dev}
+        TRT_RUNTIME_IMAGE: ${TRT_RUNTIME_IMAGE:-datasentinel-trt-runtime:dev}
     image: datasentinel-engine-trt:dev
     environment:
       DATASENTINEL_BACKEND: tensorrt

@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Session guard must run first.
+if [ "${DATASENTINEL_ENV_INITIALIZED:-0}" != "1" ]; then
+  echo "Environment not initialized."
+  echo "Run in current shell first: source ./scripts/initEnv.sh"
+  exit 1
+fi
+
 # Simple helper to run the built C++ server binary.
 # Place this file in the project root and run it to start the server.
 

@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Session guard must run first.
+if [ "${DATASENTINEL_ENV_INITIALIZED:-0}" != "1" ]; then
+  echo "Environment not initialized."
+  echo "Run in current shell first: source ./scripts/initEnv.sh"
+  exit 1
+fi
+
 # znajdź katalog główny repo (czyli katalog nadrzędny scripts/)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

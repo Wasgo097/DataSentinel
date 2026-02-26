@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 #set -e
 
+# Session guard must run first.
+if [ "${DATASENTINEL_ENV_INITIALIZED:-0}" != "1" ]; then
+    echo "Environment not initialized."
+    echo "Run in current shell first: source ./scripts/initEnv.sh"
+    exit 1
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="$ROOT_DIR/venv"
 PRODUCER="$ROOT_DIR/python/producer/producer.py"
