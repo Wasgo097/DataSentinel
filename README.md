@@ -244,7 +244,6 @@ Cross-cutting:
 - Add feature normalization (mean/std) computed in trainer and persisted in `models/config.json`, then apply it in engine/producer
 - Add a quick smoke test (1 epoch on tiny CSV) verifying that `model.onnx` and `config.json` are produced
 - Unify GPU Docker base layers for `docker/trainer/Dockerfile.gpu` and `docker/engine/Dockerfile.trt` (shared CUDA/Ubuntu base image) to improve layer cache reuse and reduce repeated image downloads
-- Optimize `.dockerignore` to reduce Docker build context size (exclude `venv/`, temporary artifacts, and other non-build assets)
 
 Trainer:
 - Add `val.csv` split and use it to compute threshold (e.g., percentile of reconstruction MSE) instead of `mean + 3*std`
