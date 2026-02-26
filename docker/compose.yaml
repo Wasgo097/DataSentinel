@@ -62,6 +62,22 @@ services:
       # Read-only mount; engine should not modify artifacts.
       - ../models:/app/models:ro
 
+  # TensorRT-enabled C++ runtime service (requires NVIDIA GPU runtime).
+  engine-trt:
+    build:
+      context: ..
+      dockerfile: docker/engine/Dockerfile.trt
+      args:
+        TENSORRT_REPO_DEB: ${TENSORRT_REPO_DEB:-docker/engine/deps/nv-tensorrt-local-repo-ubuntu2404-10.15.1-cuda-12.9_1.0-1_amd64.deb}
+    image: datasentinel-engine-trt:dev
+    environment:
+      DATASENTINEL_BACKEND: tensorrt
+    ports:
+      - "9000:9000"
+    volumes:
+      - ../models:/app/models
+    gpus: all
+
   # Python client sending sample data to the engine service.
   producer:
     build:
@@ -75,6 +91,4 @@ services:
       # Default target inside compose network; override via env when needed.
       ENGINE_HOST: ${ENGINE_HOST:-engine}
       ENGINE_PORT: ${ENGINE_PORT:-9000}
-    # Start engine first when running producer in compose mode.
-    depends_on:
-      - engine
+    # Engine service is selected by helper scripts (`engine` or `engine-trt`).

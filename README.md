@@ -23,9 +23,9 @@ DataSentinel is an anomaly detection prototype built from three parts:
 - Done: Train model on labeled dataset instead of synthetic random-only input
 - Done: Add GPU-accelerated training path for the trainer
 
-### v4 - Performance backend (In progress)
-- In progress: Add TensorRT-based inference path for C++ runtime
-- ToDo: Keep ONNX Runtime path as baseline and fallback
+### v4 - Performance backend (completed)
+- Done: Add TensorRT-based inference path for C++ runtime
+- Done: Keep ONNX Runtime path as baseline and fallback
 
 ### v5 - Service protocol (planned)
 - ToDo: Add shared `.proto` contracts for C++ and Python services
@@ -45,6 +45,8 @@ DataSentinel is an anomaly detection prototype built from three parts:
 - Docker Engine
 - Docker Compose plugin (`docker compose`)
 - NVIDIA Container Toolkit (only for GPU training)
+- TensorRT local repo `.deb` file for TensorRT Docker image build (GPU engine only):
+  place it at `docker/engine/deps/` or set `TENSORRT_REPO_DEB=/abs/path/to/file.deb`
 
 ## Repository layout
 
@@ -122,24 +124,39 @@ Run producer (in another terminal):
 
 Prefer project scripts for day-to-day usage.
 
+Prepare TensorRT package for Docker (required only for `engine-trt`):
+
+```bash
+mkdir -p docker/engine/deps
+cp /path/to/nv-tensorrt-local-repo-ubuntu2404-*.deb docker/engine/deps/
+```
+
 Run full stack (preferred):
 - `./scripts/docker/upDockerStack.sh`
 - `./scripts/docker/downDockerStack.sh`
 
 What `upDockerStack.sh` does:
 1. Runs `trainer` as a one-off job to generate `models/model.onnx` and `models/config.json`
-2. Starts `engine` and `producer` services
+2. Starts engine + producer:
+   - `engine-trt` when NVIDIA GPU is available and TensorRT `.deb` is present
+   - otherwise `engine` (ONNX)
 
 Run single Docker services:
 - `./scripts/docker/runTrainerDocker.sh` - build/run one-off trainer
-- `./scripts/docker/runEngineDocker.sh` - build/start engine on port `9000`
+- `./scripts/docker/runEngineDocker.sh` - auto-select engine:
+  - `engine-trt` when GPU + TensorRT `.deb` are detected
+  - otherwise `engine` (ONNX)
+- `./scripts/docker/runEngineDocker.sh --trt` - build/start TensorRT engine (requires GPU + TensorRT `.deb`)
+- `./scripts/docker/runEngineDocker.sh --onnx` - force ONNX engine
 - `./scripts/docker/runProducerDocker.sh` - build/run producer client
+  - for TensorRT runtime target: `ENGINE_HOST=engine-trt ./scripts/docker/runProducerDocker.sh`
 
 Minimal direct compose commands:
 
 ```bash
 docker compose -f docker/compose.yaml run --rm --build trainer
 docker compose -f docker/compose.yaml up --build engine producer
+TENSORRT_REPO_DEB=/abs/path/to/nv-tensorrt-local-repo-ubuntu2404-*.deb docker compose -f docker/compose.yaml up --build engine-trt producer
 docker compose -f docker/compose.yaml down
 ```
 
@@ -154,6 +171,9 @@ DS_UID="$(id -u)" DS_GID="$(id -g)" docker compose -f docker/compose.yaml --prof
 - `DATASENTINEL_BACKEND`
   Engine backend selector. Supported values: `onnx`, `tensorrt` (aliases: `trt`, `tensor`).
   Default: `onnx`.
+- `TENSORRT_REPO_DEB`
+  Path to TensorRT local repo `.deb` used to build `engine-trt` Docker image.
+  Default: `docker/engine/deps/nv-tensorrt-local-repo-ubuntu2404-10.15.1-cuda-12.9_1.0-1_amd64.deb`
 - `ENGINE_HOST`
   Producer target host. Default in Docker Compose: `engine`.
 - `ENGINE_PORT`
@@ -223,6 +243,8 @@ Cross-cutting:
 - Add a small labeled `test.csv` and a simple evaluation script (TP/FP/FN) for threshold sanity checks
 - Add feature normalization (mean/std) computed in trainer and persisted in `models/config.json`, then apply it in engine/producer
 - Add a quick smoke test (1 epoch on tiny CSV) verifying that `model.onnx` and `config.json` are produced
+- Unify GPU Docker base layers for `docker/trainer/Dockerfile.gpu` and `docker/engine/Dockerfile.trt` (shared CUDA/Ubuntu base image) to improve layer cache reuse and reduce repeated image downloads
+- Optimize `.dockerignore` to reduce Docker build context size (exclude `venv/`, temporary artifacts, and other non-build assets)
 
 Trainer:
 - Add `val.csv` split and use it to compute threshold (e.g., percentile of reconstruction MSE) instead of `mean + 3*std`

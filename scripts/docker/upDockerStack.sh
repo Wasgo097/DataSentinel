@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#set -euo pipefail
+set -euo pipefail
 
 if [ "${BASH_SOURCE[0]}" != "$0" ]; then
   echo "Do not source this script. Run: ./scripts/docker/upDockerStack.sh"
@@ -9,6 +9,7 @@ fi
 # Resolve project root and compose file path.
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE_FILE="$PROJECT_ROOT/docker/compose.yaml"
+TENSORRT_REPO_DEB="${TENSORRT_REPO_DEB:-$PROJECT_ROOT/docker/engine/deps/nv-tensorrt-local-repo-ubuntu2404-10.15.1-cuda-12.9_1.0-1_amd64.deb}"
 
 echo "Project root: $PROJECT_ROOT"
 echo "Compose file: $COMPOSE_FILE"
@@ -48,6 +49,10 @@ can_use_nvidia_gpu() {
   return 0
 }
 
+can_build_engine_trt_image() {
+  [ -f "$TENSORRT_REPO_DEB" ]
+}
+
 # Prepare model artifacts first.
 echo "Running trainer one-off job..."
 if [ "$MODE" = "cpu" ]; then
@@ -73,5 +78,20 @@ else
 fi
 
 # Start runtime services.
-echo "Starting engine and producer..."
-docker compose -f "$COMPOSE_FILE" up --build engine producer
+ENGINE_SERVICE="engine"
+PRODUCER_ENGINE_HOST="engine"
+
+if [ "$MODE" = "gpu" ] || [ "$MODE" = "auto" ]; then
+  if can_use_nvidia_gpu && can_build_engine_trt_image; then
+    ENGINE_SERVICE="engine-trt"
+    PRODUCER_ENGINE_HOST="engine-trt"
+    echo "Runtime selection: TensorRT engine (GPU + TensorRT repo package detected)."
+  elif can_use_nvidia_gpu && ! can_build_engine_trt_image; then
+    echo "Runtime selection fallback: GPU detected, but TensorRT repo package is missing:"
+    echo "  $TENSORRT_REPO_DEB"
+    echo "Falling back to ONNX engine."
+  fi
+fi
+
+echo "Starting ${ENGINE_SERVICE} and producer..."
+ENGINE_HOST="$PRODUCER_ENGINE_HOST" docker compose -f "$COMPOSE_FILE" up --build "$ENGINE_SERVICE" producer

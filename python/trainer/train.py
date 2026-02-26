@@ -22,6 +22,7 @@ LEARNING_RATE = 1e-3
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MODEL_DIR = os.path.join(ROOT_DIR, "models")
 MODEL_PATH = os.path.join(MODEL_DIR, "model.onnx")
+ENGINE_PATH = os.path.join(MODEL_DIR, "model.engine")
 CONFIG_PATH = os.path.join(MODEL_DIR, "config.json")
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 TRAIN_CSV_PATH = os.path.join(DATA_DIR, "train.csv")
@@ -152,6 +153,11 @@ def export_onnx(model):
     )
 
     print(f"Model exported to {MODEL_PATH}")
+
+    # Force TensorRT engine regeneration for the freshly exported ONNX model.
+    if os.path.exists(ENGINE_PATH):
+        os.remove(ENGINE_PATH)
+        print(f"Removed stale TensorRT engine: {ENGINE_PATH}")
 
 
 # =========================

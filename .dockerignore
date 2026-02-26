@@ -2,8 +2,12 @@
 .gitignore
 .vscode
 venv
+.venv
+env
+ENV
 python/trainer/.venv
 cpp/Engine/build
 models
 __pycache__
+**/__pycache__
 *.pyc
